@@ -126,18 +126,43 @@ class ImageGenerator:
                 ),
             )
 
+            # デバッグ: レスポンス構造を確認
+            logger.debug(f"Response type: {type(response)}")
+
             # レスポンスから画像を抽出
             if response.candidates:
                 for part in response.candidates[0].content.parts:
+                    logger.debug(f"Part type: {type(part)}, attrs: {dir(part)[:5]}...")
+
+                    # inline_data がある場合（base64エンコード）
                     if hasattr(part, 'inline_data') and part.inline_data:
-                        image_data = base64.b64decode(part.inline_data.data)
-                        return Image.open(io.BytesIO(image_data))
+                        inline_data = part.inline_data
+                        logger.debug(f"inline_data type: {type(inline_data)}")
+
+                        # data属性がbytesの場合
+                        if hasattr(inline_data, 'data'):
+                            if isinstance(inline_data.data, bytes):
+                                image_bytes = inline_data.data
+                            else:
+                                # base64文字列の場合
+                                image_bytes = base64.b64decode(inline_data.data)
+
+                            logger.debug(f"Image bytes length: {len(image_bytes)}")
+                            return Image.open(io.BytesIO(image_bytes))
+
+                    # image属性がある場合（PIL Image）
+                    if hasattr(part, 'image') and part.image:
+                        logger.debug("Found PIL Image in part.image")
+                        return part.image
 
             logger.warning("No image in response")
+            logger.debug(f"Full response: {response}")
             return None
 
         except Exception as e:
             logger.error(f"Image generation failed: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             raise
 
     def _generate_with_reference(
@@ -175,9 +200,19 @@ class ImageGenerator:
 
             if response.candidates:
                 for part in response.candidates[0].content.parts:
+                    # inline_data がある場合
                     if hasattr(part, 'inline_data') and part.inline_data:
-                        image_data = base64.b64decode(part.inline_data.data)
-                        return Image.open(io.BytesIO(image_data))
+                        inline_data = part.inline_data
+                        if hasattr(inline_data, 'data'):
+                            if isinstance(inline_data.data, bytes):
+                                image_bytes = inline_data.data
+                            else:
+                                image_bytes = base64.b64decode(inline_data.data)
+                            return Image.open(io.BytesIO(image_bytes))
+
+                    # image属性がある場合
+                    if hasattr(part, 'image') and part.image:
+                        return part.image
 
             return None
 
