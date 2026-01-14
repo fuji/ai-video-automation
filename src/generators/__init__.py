@@ -5,6 +5,7 @@ from .image_generator import ImageGenerator
 from .video_generator import VideoGenerator
 from .narration_generator import NarrationGenerator, NarrationResult, NarrationConfig, QuotaTracker
 from .news_explainer import NewsExplainer, NewsExplanation
+from .veo_video_generator import VeoVideoGenerator, VeoVideoResult
 
 __all__ = [
     "ContentPlanner",
@@ -19,4 +20,6 @@ __all__ = [
     "QuotaTracker",
     "NewsExplainer",
     "NewsExplanation",
+    "VeoVideoGenerator",
+    "VeoVideoResult",
 ]

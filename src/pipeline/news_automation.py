@@ -29,6 +29,7 @@ from ..utils.news_scraper import NewsScraper
 from ..generators.news_explainer import NewsExplainer, NewsExplanation
 from ..generators.narration_generator import NarrationGenerator, NarrationConfig
 from ..generators.image_generator import ImageGenerator
+from ..generators.veo_video_generator import VeoVideoGenerator
 from ..editors.video_animator import VideoAnimator
 from ..editors.subtitle_renderer import SubtitleRenderer
 from ..editors.video_editor import VideoEditor
@@ -56,11 +57,13 @@ class NewsAutomationPipeline:
         self.news_explainer: Optional[NewsExplainer] = None
         self.narration_generator: Optional[NarrationGenerator] = None
         self.image_generator: Optional[ImageGenerator] = None
+        self.veo_generator: Optional[VeoVideoGenerator] = None
         self.video_animator: Optional[VideoAnimator] = None
         self.subtitle_renderer: Optional[SubtitleRenderer] = None
         self.video_editor: Optional[VideoEditor] = None
 
         self._initialized = False
+        self._use_veo = False  # Veo使用フラグ
 
     def initialize(self):
         """コンポーネント初期化"""
@@ -101,7 +104,16 @@ class NewsAutomationPipeline:
         except Exception as e:
             logger.warning(f"ImageGenerator init failed: {e}")
 
-        # アニメーター
+        # Veo動画生成
+        try:
+            self.veo_generator = VeoVideoGenerator()
+            self._use_veo = True
+            print_success("VeoVideoGenerator initialized")
+        except Exception as e:
+            logger.warning(f"VeoVideoGenerator init failed: {e}")
+            self._use_veo = False
+
+        # アニメーター（Veoフォールバック用）
         self.video_animator = VideoAnimator()
         print_success("VideoAnimator initialized")
 
@@ -300,7 +312,7 @@ class NewsAutomationPipeline:
         explanation: NewsExplanation,
         timestamp: str,
     ) -> list[str]:
-        """画像をアニメーション化"""
+        """画像をアニメーション化（Veo優先、フォールバックでFFmpeg）"""
         animated_paths = []
 
         if not image_paths:
@@ -308,16 +320,53 @@ class NewsAutomationPipeline:
             return []
 
         # 各セグメントの長さを計算
-        segment_duration = explanation.estimated_duration // len(image_paths)
-        effects = ["ken_burns", "zoom_in", "pan_right"]
+        segment_duration = max(5, explanation.estimated_duration // len(image_paths))
+        scene_types = ["intro", "detail", "outro"]
+
+        # ニュースカテゴリを判定
+        news_category = "default"
+        if self.veo_generator:
+            news_category = self.veo_generator.detect_category(explanation.title)
+            logger.info(f"Detected category: {news_category}")
 
         for i, image_path in enumerate(image_paths):
+            scene_type = scene_types[i % len(scene_types)]
+            output_path = str(VIDEOS_DIR / f"animated_{timestamp}_{i:02d}.mp4")
+
+            # Veoで動画生成を試行
+            if self._use_veo and self.veo_generator:
+                logger.info(f"Generating video {i+1}/{len(image_paths)} with Veo...")
+
+                # ダイナミックなプロンプト生成
+                veo_prompt = self.veo_generator.create_dynamic_prompt(
+                    news_category=news_category,
+                    scene_type=scene_type,
+                )
+
+                result = self.veo_generator.generate_from_image(
+                    image_path=image_path,
+                    output_path=output_path,
+                    prompt=veo_prompt,
+                    duration=segment_duration,
+                    resolution="1080p",
+                    aspect_ratio="16:9",
+                )
+
+                if result.success:
+                    animated_paths.append(result.output_path)
+                    continue
+                else:
+                    logger.warning(f"Veo failed, falling back to FFmpeg: {result.error_message}")
+
+            # フォールバック: FFmpegでKen Burns効果
+            effects = ["dynamic", "ken_burns", "zoom_in"]
             effect = effects[i % len(effects)]
+
             result = self.video_animator.animate(
                 image_path,
                 duration=segment_duration,
                 effect=effect,
-                output_path=str(VIDEOS_DIR / f"animated_{timestamp}_{i:02d}.mp4"),
+                output_path=output_path,
             )
             if result.success:
                 animated_paths.append(result.output_path)
