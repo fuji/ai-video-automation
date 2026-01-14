@@ -227,6 +227,36 @@ class NewsAutomationPipeline:
                 source_url=news.url,
             )
 
+    def _create_enhanced_image_prompt(self, title: str, base_prompt: str) -> str:
+        """ニュースに合わせた視覚的にインパクトのある画像プロンプトを生成"""
+        base_style = (
+            "cinematic, dramatic lighting, vibrant colors, "
+            "high contrast, professional news graphics style, "
+            "modern, eye-catching, broadcast quality, "
+            "depth of field, dynamic composition"
+        )
+
+        # ニュースカテゴリに応じたビジュアルスタイル
+        if any(k in title for k in ["政治", "選挙", "国会", "首相", "政府"]):
+            theme = "Japanese national diet building, political scene, dramatic sky, news broadcast style"
+        elif any(k in title for k in ["経済", "株", "円", "金融", "市場"]):
+            theme = "financial district, stock market charts, business scene, Tokyo cityscape at night with neon lights"
+        elif any(k in title for k in ["テクノロジー", "AI", "IT", "デジタル", "ロボット"]):
+            theme = "futuristic technology, digital world, cyber space, holographic displays, circuit patterns"
+        elif any(k in title for k in ["国際", "世界", "外交", "海外"]):
+            theme = "world map, global network, international flags, earth from space"
+        elif any(k in title for k in ["科学", "研究", "発見", "宇宙"]):
+            theme = "scientific laboratory, space exploration, microscopic view, DNA helix"
+        elif any(k in title for k in ["スポーツ", "五輪", "サッカー", "野球"]):
+            theme = "sports stadium, dynamic action, spotlights, athletic energy"
+        else:
+            theme = "abstract modern background, dynamic geometric shapes, energy waves, gradient colors"
+
+        # base_promptがあれば組み合わせ
+        if base_prompt:
+            return f"{base_prompt}, {theme}, {base_style}, no text, no people's faces, 16:9 aspect ratio"
+        return f"{theme}, {base_style}, no text, no people's faces, 16:9 aspect ratio"
+
     def _generate_background_images(
         self,
         explanation: NewsExplanation,
@@ -235,24 +265,34 @@ class NewsAutomationPipeline:
         """背景画像を生成"""
         image_paths = []
 
-        # 画像プロンプトがある場合
-        if explanation.image_prompts and self.image_generator:
-            for i, prompt in enumerate(explanation.image_prompts[:3]):
-                output_name = f"bg_{timestamp}_{i:02d}"
-                result = self.image_generator.generate(prompt, output_name)
-                if result.success:
-                    image_paths.append(result.file_path)
-                time.sleep(1)
+        if not self.image_generator:
+            logger.warning("ImageGenerator not available")
+            return []
 
-        # 画像が足りない場合は既存の記事画像を使用
-        # または単色背景を生成（実装簡略化）
-        while len(image_paths) < 3:
-            # プレースホルダー（実際は画像生成または既存画像使用）
-            logger.warning(f"Using placeholder for image {len(image_paths)}")
-            # ダミーパスを追加（実際には画像が必要）
-            image_paths.append(None)
+        # 画像プロンプトを強化して生成
+        prompts_to_use = []
+        if explanation.image_prompts:
+            for prompt in explanation.image_prompts[:3]:
+                enhanced = self._create_enhanced_image_prompt(explanation.title, prompt)
+                prompts_to_use.append(enhanced)
+        else:
+            # プロンプトがない場合はタイトルから生成
+            for i in range(3):
+                enhanced = self._create_enhanced_image_prompt(explanation.title, "")
+                prompts_to_use.append(enhanced)
 
-        return [p for p in image_paths if p]  # Noneを除外
+        for i, prompt in enumerate(prompts_to_use):
+            output_name = f"bg_{timestamp}_{i:02d}"
+            logger.info(f"Generating image {i+1}/3 with enhanced prompt")
+            result = self.image_generator.generate(prompt, output_name)
+            if result.success:
+                image_paths.append(result.file_path)
+            time.sleep(1)
+
+        if not image_paths:
+            logger.warning("No images generated, pipeline may fail")
+
+        return image_paths
 
     def _create_animated_videos(
         self,

@@ -48,24 +48,40 @@ class SubtitleResult:
 class SubtitleStyle:
     """字幕スタイル設定"""
     font_name: str = "Hiragino Sans"  # macOS用日本語フォント
-    font_size: int = 24
+    font_size: int = 48  # 大きめのフォントサイズ
     font_color: str = "white"
     outline_color: str = "black"
-    outline_width: int = 2
+    outline_width: int = 4  # 太い縁取り
     shadow: bool = True
+    shadow_depth: int = 3  # 影の深さ
     position: str = "bottom"  # bottom, center, top
-    margin_v: int = 30
-    margin_h: int = 20
+    margin_v: int = 60  # 下からの余白を増加
+    margin_h: int = 40
+    bold: bool = True  # 太字
 
 
 class SubtitleRenderer:
     """FFmpegで動画に字幕を追加"""
 
-    # 日本語フォント（OS別）
-    FONTS = {
-        "darwin": "Hiragino Sans",  # macOS
-        "linux": "Noto Sans CJK JP",
-        "win32": "Yu Gothic",
+    # 日本語フォント優先順位（OS別、太字優先）
+    FONT_PRIORITY = {
+        "darwin": [
+            "Hiragino Sans W6",
+            "Hiragino Kaku Gothic ProN W6",
+            "Hiragino Sans",
+            "Hiragino Kaku Gothic ProN",
+        ],
+        "linux": [
+            "Noto Sans CJK JP Bold",
+            "Noto Sans CJK JP",
+            "Source Han Sans JP Bold",
+        ],
+        "win32": [
+            "Yu Gothic Bold",
+            "Meiryo Bold",
+            "Yu Gothic",
+            "Meiryo",
+        ],
     }
 
     def __init__(self):
@@ -73,11 +89,36 @@ class SubtitleRenderer:
         self.output_dir = FINAL_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # OS別フォント設定
-        import sys
-        self.default_font = self.FONTS.get(sys.platform, "Arial")
+        # 最適なフォントを検索
+        self.default_font = self._find_best_font()
 
         logger.info(f"SubtitleRenderer initialized (font: {self.default_font})")
+
+    def _find_best_font(self) -> str:
+        """システムで利用可能な最適なフォントを探す"""
+        import sys
+
+        font_list = self.FONT_PRIORITY.get(sys.platform, ["Arial"])
+
+        # fc-listでインストール済みフォントを確認（macOS/Linux）
+        try:
+            result = subprocess.run(
+                ["fc-list", ":lang=ja", "family"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            available_fonts = result.stdout
+
+            for font in font_list:
+                if font in available_fonts:
+                    logger.debug(f"Found font: {font}")
+                    return font
+        except Exception as e:
+            logger.debug(f"fc-list failed: {e}")
+
+        # デフォルト
+        return font_list[0] if font_list else "Arial"
 
     def _check_ffmpeg(self):
         """FFmpeg確認"""
@@ -163,18 +204,29 @@ class SubtitleRenderer:
         # 位置設定
         alignment = {"bottom": 2, "center": 10, "top": 6}.get(style.position, 2)
 
+        # 影の深さ
+        shadow_depth = getattr(style, 'shadow_depth', 2)
+
+        # 太字設定
+        bold = getattr(style, 'bold', False)
+        bold_value = "-1" if bold else "0"  # -1 = Bold
+
         # ASS形式のスタイル（FFmpeg subtitles filter用）
+        # より視認性の高いスタイル設定
         force_style = (
             f"FontName={style.font_name},"
             f"FontSize={style.font_size},"
+            f"Bold={bold_value},"
             f"PrimaryColour=&H00{self._color_to_bgr(style.font_color)},"
             f"OutlineColour=&H00{self._color_to_bgr(style.outline_color)},"
+            f"BackColour=&H80000000,"  # 半透明の背景
             f"Outline={style.outline_width},"
-            f"Shadow={'1' if style.shadow else '0'},"
+            f"Shadow={shadow_depth if style.shadow else 0},"
             f"Alignment={alignment},"
             f"MarginV={style.margin_v},"
             f"MarginL={style.margin_h},"
-            f"MarginR={style.margin_h}"
+            f"MarginR={style.margin_h},"
+            f"BorderStyle=1"  # アウトライン + 影
         )
 
         # SRTパスをエスケープ（Windows対応）
@@ -185,6 +237,8 @@ class SubtitleRenderer:
             "-i", video_path,
             "-vf", f"subtitles={srt_escaped}:force_style='{force_style}'",
             "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "20",
             "-c:a", "copy",
             output_path,
         ]

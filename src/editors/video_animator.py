@@ -21,7 +21,7 @@ class AnimationResult:
     error_message: Optional[str] = None
 
 
-EffectType = Literal["zoom_in", "zoom_out", "ken_burns", "pan_left", "pan_right", "pan_up", "pan_down"]
+EffectType = Literal["zoom_in", "zoom_out", "ken_burns", "pan_left", "pan_right", "pan_up", "pan_down", "dynamic"]
 
 
 class VideoAnimator:
@@ -93,6 +93,7 @@ class VideoAnimator:
                 "pan_right": self._pan_right,
                 "pan_up": self._pan_up,
                 "pan_down": self._pan_down,
+                "dynamic": self._dynamic_effect,
             }
 
             method = effect_methods.get(effect, self._ken_burns)
@@ -206,23 +207,74 @@ class VideoAnimator:
         width: int,
         height: int,
     ) -> AnimationResult:
-        """Ken Burns効果（ズーム + パン）"""
+        """Ken Burns効果（ズーム + パン + 色彩強化）"""
         total_frames = duration * fps
-        # ゆっくりズームしながら右にパン
-        zoom_filter = (
+        # ゆっくりズームしながら右にパン + 色彩強化
+        video_filter = (
             f"zoompan=z='min(zoom+0.0015,1.3)':"
             f"x='if(gte(zoom,1.3),x,x+1)':"
             f"y='ih/2-(ih/zoom/2)':"
-            f"d={total_frames}:s={width}x{height}:fps={fps}"
+            f"d={total_frames}:s={width}x{height}:fps={fps},"
+            # 色彩強化: コントラスト1.1、彩度1.2
+            "eq=contrast=1.1:saturation=1.2,"
+            # シャープネス
+            "unsharp=3:3:1.0:3:3:0.5"
         )
 
         cmd = [
             "ffmpeg", "-y",
             "-loop", "1",
             "-i", image,
-            "-vf", zoom_filter,
+            "-vf", video_filter,
             "-t", str(duration),
             "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            output,
+        ]
+
+        if self._run_ffmpeg(cmd):
+            return AnimationResult(
+                success=True,
+                output_path=output,
+                duration=duration,
+            )
+
+        return AnimationResult(success=False, error_message="FFmpeg failed")
+
+    def _dynamic_effect(
+        self,
+        image: str,
+        duration: int,
+        output: str,
+        fps: int,
+        width: int,
+        height: int,
+    ) -> AnimationResult:
+        """ダイナミック効果（強めのズーム + 色彩バイブレーション）"""
+        total_frames = duration * fps
+        # 強めのズーム + 色彩強調
+        video_filter = (
+            f"zoompan=z='min(zoom+0.002,1.5)':"
+            f"x='iw/2-(iw/zoom/2)':"
+            f"y='ih/2-(ih/zoom/2)':"
+            f"d={total_frames}:s={width}x{height}:fps={fps},"
+            # 強めの色彩強化
+            "eq=contrast=1.2:saturation=1.3:brightness=0.02,"
+            # シャープネス強化
+            "unsharp=5:5:1.5:5:5:0.5"
+        )
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", image,
+            "-vf", video_filter,
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "18",
             "-pix_fmt", "yuv420p",
             output,
         ]
