@@ -245,11 +245,11 @@ class NarrationGenerator:
                 use_speaker_boost=use_speaker_boost,
             )
 
-            # 音声生成 (v1.0+ API - クライアントメソッド使用)
-            audio_generator = self.client.generate(
+            # 音声生成 (v1.0+ API - text_to_speech.convert を使用)
+            audio_generator = self.client.text_to_speech.convert(
                 text=text,
-                voice=voice,
-                model="eleven_multilingual_v2",
+                voice_id=voice,  # voice_id パラメータを使用
+                model_id="eleven_multilingual_v2",
                 voice_settings=voice_settings,
             )
 
