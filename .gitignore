@@ -1,0 +1,52 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+.venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Output
+output/
+logs/
+*.mp4
+*.mp3
+*.wav
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Credentials
+*.json
+!package.json
+client_secrets.json
+youtube_credentials.json
+*_credentials.json
+
+# Temporary
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Project files
+project_*.json
