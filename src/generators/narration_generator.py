@@ -120,16 +120,17 @@ class QuotaTracker:
 class NarrationGenerator:
     """ElevenLabs APIで音声ナレーション生成（クォータトラッキング付き）"""
 
-    # 日本語対応ボイス（multilingual_v2モデル）
-    RECOMMENDED_VOICES = {
-        "rachel": "Rachel",  # 女性、落ち着いた声
-        "domi": "Domi",  # 女性、明るい声
-        "bella": "Bella",  # 女性、やわらかい声
-        "antoni": "Antoni",  # 男性、落ち着いた声
-        "josh": "Josh",  # 男性、ニュースキャスター風
-        "arnold": "Arnold",  # 男性、力強い声
-        "adam": "Adam",  # 男性、ナレーター風
-        "sam": "Sam",  # 男性、若い声
+    # Voice名 → Voice ID マッピング（ElevenLabs公式ID）
+    VOICE_MAP = {
+        "Rachel": "21m00Tcm4TlvDq8ikWAM",  # 女性、落ち着いた声
+        "Bella": "EXAVITQu4vr4xnSDxMaL",   # 女性、やわらかい声
+        "Antoni": "ErXwobaYiN019PkySvjV",  # 男性、落ち着いた声
+        "Elli": "MF3mGyEYCl7XYWbV9V6O",    # 女性、若い声
+        "Josh": "TxGEqnHWrfWFTfGW9XjX",    # 男性、ニュースキャスター風
+        "Sam": "yoZ06aMxZJJ28mfd3POQ",     # 男性、若い声
+        "Arnold": "VR6AewLTigWG4xSOukaG",  # 男性、力強い声
+        "Domi": "AZnzlk1XvdvUeBnXmlld",    # 女性、明るい声
+        "Adam": "pNInz6obpgDQGcFmaJgB",    # 男性、ナレーター風
     }
 
     def __init__(self):
@@ -234,7 +235,9 @@ class NarrationGenerator:
             timestamp = int(time.time())
             output_path = str(self.audio_dir / f"narration_{timestamp}.mp3")
 
-        logger.info(f"Generating narration: {char_count} chars, voice={voice}")
+        # Voice名をVoice IDに変換（マップにない場合はそのまま使用）
+        voice_id = self.VOICE_MAP.get(voice, voice)
+        logger.info(f"Generating narration: {char_count} chars, voice={voice} (id: {voice_id[:8]}...)")
 
         try:
             # ボイス設定 (v1.0+ API)
@@ -248,7 +251,7 @@ class NarrationGenerator:
             # 音声生成 (v1.0+ API - text_to_speech.convert を使用)
             audio_generator = self.client.text_to_speech.convert(
                 text=text,
-                voice_id=voice,  # voice_id パラメータを使用
+                voice_id=voice_id,  # 変換済みのvoice_idを使用
                 model_id="eleven_multilingual_v2",
                 voice_settings=voice_settings,
             )
