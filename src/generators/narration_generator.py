@@ -131,7 +131,12 @@ class NarrationGenerator:
         "Arnold": "VR6AewLTigWG4xSOukaG",  # 男性、力強い声
         "Domi": "AZnzlk1XvdvUeBnXmlld",    # 女性、明るい声
         "Adam": "pNInz6obpgDQGcFmaJgB",    # 男性、ナレーター風
+        "Yuki": "HrSkFxfPhljjtQifnw1n",    # 女性、ASMR風ささやき声
+        "Romaco": "KgETZ36CCLD1Cob4xpkv",  # 女性、明るく元気
     }
+    
+    # デフォルトボイス
+    DEFAULT_VOICE = "Romaco"
 
     def __init__(self):
         self.api_key = os.getenv("ELEVENLABS_API_KEY")
@@ -186,7 +191,7 @@ class NarrationGenerator:
         self,
         text: str,
         output_path: str = None,
-        voice: str = "Rachel",
+        voice: str = None,
         speed: float = 1.1,
         stability: float = 0.5,
         similarity_boost: float = 0.75,
@@ -236,6 +241,7 @@ class NarrationGenerator:
             output_path = str(self.audio_dir / f"narration_{timestamp}.mp3")
 
         # Voice名をVoice IDに変換（マップにない場合はそのまま使用）
+        voice = voice or self.DEFAULT_VOICE
         voice_id = self.VOICE_MAP.get(voice, voice)
         logger.info(f"Generating narration: {char_count} chars, voice={voice} (id: {voice_id[:8]}...)")
 
@@ -292,7 +298,7 @@ class NarrationGenerator:
         self,
         script: list[str],
         output_dir: str = None,
-        voice: str = "Rachel",
+        voice: str = None,
         speed: float = 1.1,
     ) -> list[NarrationResult]:
         """複数セグメントの音声を生成
@@ -387,13 +393,24 @@ class NarrationConfig:
 
     @staticmethod
     def news_style() -> dict:
-        """ニュース読み上げスタイル"""
+        """ニュース読み上げスタイル（明るく元気）"""
         return {
-            "voice": "Rachel",
-            "speed": 1.15,
+            "voice": "Romaco",
+            "speed": 1.0,
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+            "style": 0.2,
+        }
+
+    @staticmethod
+    def asmr_style() -> dict:
+        """ASMRささやきスタイル"""
+        return {
+            "voice": "Yuki",
+            "speed": 0.85,
             "stability": 0.7,
-            "similarity_boost": 0.8,
-            "style": 0.0,
+            "similarity_boost": 0.9,
+            "style": 0.1,
         }
 
     @staticmethod
