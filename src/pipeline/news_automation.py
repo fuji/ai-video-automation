@@ -26,13 +26,16 @@ from ..logger import (
 )
 from ..utils.trend_detector import TrendDetector, TrendingNews
 from ..utils.news_scraper import NewsScraper
+from ..utils.rss_fetcher import RSSFetcher, RSSArticle
 from ..generators.news_explainer import NewsExplainer, NewsExplanation
 from ..generators.narration_generator import NarrationGenerator, NarrationConfig
 from ..generators.image_generator import ImageGenerator
 from ..generators.veo_video_generator import VeoVideoGenerator
+from ..generators.news_content_planner import NewsContentPlanner
 from ..editors.video_animator import VideoAnimator
 from ..editors.subtitle_renderer import SubtitleRenderer
 from ..editors.video_editor import VideoEditor
+from ..editors.news_graphics import NewsGraphicsCompositor
 
 logger = setup_logger("news_automation")
 
@@ -54,13 +57,16 @@ class NewsAutomationPipeline:
     def __init__(self):
         self.trend_detector: Optional[TrendDetector] = None
         self.news_scraper: Optional[NewsScraper] = None
+        self.rss_fetcher: Optional[RSSFetcher] = None
         self.news_explainer: Optional[NewsExplainer] = None
         self.narration_generator: Optional[NarrationGenerator] = None
         self.image_generator: Optional[ImageGenerator] = None
         self.veo_generator: Optional[VeoVideoGenerator] = None
+        self.content_planner: Optional[NewsContentPlanner] = None
         self.video_animator: Optional[VideoAnimator] = None
         self.subtitle_renderer: Optional[SubtitleRenderer] = None
         self.video_editor: Optional[VideoEditor] = None
+        self.graphics_compositor: Optional[NewsGraphicsCompositor] = None
 
         self._initialized = False
         self._use_veo = False  # Veo使用フラグ
@@ -83,6 +89,10 @@ class NewsAutomationPipeline:
         self.news_scraper = NewsScraper()
         print_success("NewsScraper initialized")
 
+        # RSS フェッチャー（Yahoo!ニュース）
+        self.rss_fetcher = RSSFetcher()
+        print_success("RSSFetcher initialized")
+
         # 解説生成
         try:
             self.news_explainer = NewsExplainer()
@@ -103,6 +113,22 @@ class NewsAutomationPipeline:
             print_success("ImageGenerator initialized")
         except Exception as e:
             logger.warning(f"ImageGenerator init failed: {e}")
+
+        # コンテンツプランナー
+        try:
+            self.content_planner = NewsContentPlanner()
+            print_success("NewsContentPlanner initialized")
+        except Exception as e:
+            logger.warning(f"NewsContentPlanner init failed: {e}")
+
+        # グラフィック合成（FJ News 24）
+        try:
+            self.graphics_compositor = NewsGraphicsCompositor(
+                channel_name=config.news.channel_name
+            )
+            print_success(f"NewsGraphicsCompositor initialized ({config.news.channel_name})")
+        except Exception as e:
+            logger.warning(f"NewsGraphicsCompositor init failed: {e}")
 
         # Veo動画生成
         try:
@@ -312,37 +338,58 @@ class NewsAutomationPipeline:
         explanation: NewsExplanation,
         timestamp: str,
     ) -> list[str]:
-        """画像をアニメーション化（Veo優先、フォールバックでFFmpeg）"""
+        """画像を超ダイナミックな動画に変換（Veo 3.1優先、フォールバックでFFmpeg）"""
         animated_paths = []
 
         if not image_paths:
             logger.warning("No images to animate")
             return []
 
-        # 各セグメントの長さを計算
-        segment_duration = max(5, explanation.estimated_duration // len(image_paths))
+        # 各セグメントの長さを計算（Veo 3.1は5-8秒が最適）
+        segment_duration = max(8, min(10, explanation.estimated_duration // len(image_paths)))
         scene_types = ["intro", "detail", "outro"]
 
         # ニュースカテゴリを判定
         news_category = "default"
         if self.veo_generator:
             news_category = self.veo_generator.detect_category(explanation.title)
-            logger.info(f"Detected category: {news_category}")
+
+        logger.info("=" * 70)
+        logger.info("🎬 DYNAMIC VIDEO GENERATION PIPELINE")
+        logger.info("=" * 70)
+        logger.info(f"News Title: {explanation.title[:60]}...")
+        logger.info(f"Category Detected: {news_category}")
+        logger.info(f"Total Clips: {len(image_paths)}")
+        logger.info(f"Duration per clip: {segment_duration}s")
+        logger.info(f"Veo 3.1 Enabled: {self._use_veo}")
+        logger.info("=" * 70)
+
+        print_info(f"Video Generation: {len(image_paths)} clips")
+        print_info(f"Category: {news_category} | Duration: {segment_duration}s each")
 
         for i, image_path in enumerate(image_paths):
             scene_type = scene_types[i % len(scene_types)]
             output_path = str(VIDEOS_DIR / f"animated_{timestamp}_{i:02d}.mp4")
 
-            # Veoで動画生成を試行
-            if self._use_veo and self.veo_generator:
-                logger.info(f"Generating video {i+1}/{len(image_paths)} with Veo...")
+            logger.info("-" * 50)
+            logger.info(f"📹 Processing clip {i+1}/{len(image_paths)}")
+            logger.info(f"   Scene type: {scene_type}")
+            logger.info(f"   Image: {Path(image_path).name}")
 
-                # ダイナミックなプロンプト生成
+            # Veo 3.1で超ダイナミックな動画生成を試行
+            if self._use_veo and self.veo_generator:
+                print_info(f"🎬 Generating DYNAMIC video {i+1}/{len(image_paths)} with Veo 3.1...")
+
+                # 超ダイナミックなプロンプト生成
                 veo_prompt = self.veo_generator.create_dynamic_prompt(
                     news_category=news_category,
                     scene_type=scene_type,
+                    news_title=explanation.title,
                 )
+                logger.info(f"   Prompt length: {len(veo_prompt)} chars")
+                logger.info(f"   Prompt preview: {veo_prompt[:100]}...")
 
+                # 動画生成（高い動きの強度で）
                 result = self.veo_generator.generate_from_image(
                     image_path=image_path,
                     output_path=output_path,
@@ -350,15 +397,22 @@ class NewsAutomationPipeline:
                     duration=segment_duration,
                     resolution="1080p",
                     aspect_ratio="16:9",
+                    motion_strength=0.95,   # 非常に高い動き
+                    guidance_scale=9.0,     # プロンプトに強く忠実
                 )
 
                 if result.success:
+                    print_success(f"✅ Video {i+1} generated: {result.generation_time:.1f}s")
+                    logger.info(f"   ✅ Veo success: {result.output_path}")
                     animated_paths.append(result.output_path)
                     continue
                 else:
-                    logger.warning(f"Veo failed, falling back to FFmpeg: {result.error_message}")
+                    logger.warning(f"   ⚠️ Veo failed: {result.error_message}")
+                    print_info(f"   Falling back to FFmpeg...")
 
             # フォールバック: FFmpegでKen Burns効果
+            print_info(f"Using FFmpeg fallback for video {i+1}...")
+            logger.info(f"   Using FFmpeg Ken Burns fallback")
             effects = ["dynamic", "ken_burns", "zoom_in"]
             effect = effects[i % len(effects)]
 
@@ -369,7 +423,14 @@ class NewsAutomationPipeline:
                 output_path=output_path,
             )
             if result.success:
+                logger.info(f"   ✅ FFmpeg success: {result.output_path}")
                 animated_paths.append(result.output_path)
+            else:
+                logger.error(f"   ❌ FFmpeg also failed")
+
+        logger.info("=" * 70)
+        logger.info(f"🏁 Video generation complete: {len(animated_paths)}/{len(image_paths)} clips")
+        logger.info("=" * 70)
 
         return animated_paths
 
@@ -509,6 +570,184 @@ class NewsAutomationPipeline:
         print_header("Daily Generation Complete")
         print_success(f"Generated {success_count}/{count} videos")
 
+        return results
+
+
+    def fetch_yahoo_news(
+        self,
+        category: str = None,
+        limit: int = 10,
+    ) -> list[RSSArticle]:
+        """Yahoo!ニュースからRSS取得
+        
+        Args:
+            category: カテゴリ（None で config から取得）
+            limit: 取得件数
+            
+        Returns:
+            RSSArticle のリスト
+        """
+        if not self._initialized:
+            self.initialize()
+        
+        if not self.rss_fetcher:
+            logger.error("RSSFetcher not available")
+            return []
+        
+        cat = category or config.news.category
+        return self.rss_fetcher.fetch_yahoo_news(cat, limit=limit)
+
+    def generate_news_image(
+        self,
+        article: RSSArticle,
+        output_name: str = None,
+        add_graphics: bool = True,
+    ) -> Optional[str]:
+        """ニュース記事から画像を生成（グラフィック付き）
+        
+        Args:
+            article: RSSArticle
+            output_name: 出力ファイル名（拡張子なし）
+            add_graphics: TV ニュースグラフィックを追加するか
+            
+        Returns:
+            生成された画像のパス（失敗時は None）
+        """
+        if not self._initialized:
+            self.initialize()
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_name = output_name or f"news_{timestamp}"
+        
+        try:
+            # 1. コンテンツプランナーでプロンプト生成
+            if self.content_planner:
+                logger.info(f"Planning content for: {article.title}")
+                plan = self.content_planner.plan(
+                    title=article.title,
+                    content=article.summary or article.title,
+                    scene_count=1,
+                )
+                image_prompt = plan.scenes[0].image_prompt if plan.scenes else None
+                rewritten_title = plan.rewritten_title
+            else:
+                image_prompt = None
+                rewritten_title = article.title
+            
+            # フォールバックプロンプト
+            if not image_prompt:
+                image_prompt = self._create_enhanced_image_prompt(article.title, "")
+            
+            logger.info(f"Image prompt: {image_prompt[:100]}...")
+            
+            # 2. 画像生成
+            if not self.image_generator:
+                logger.error("ImageGenerator not available")
+                return None
+            
+            result = self.image_generator.generate(
+                prompt=image_prompt,
+                output_name=output_name,
+            )
+            
+            if not result.success:
+                logger.error(f"Image generation failed: {result.error_message}")
+                return None
+            
+            image_path = result.file_path
+            logger.info(f"Image generated: {image_path}")
+            
+            # 3. グラフィック合成
+            if add_graphics and self.graphics_compositor:
+                # ヘッドライン（20文字以内）
+                headline = rewritten_title
+                if len(headline) > 20:
+                    headline = headline[:18] + "…"
+                
+                # サブヘッドライン（元タイトル）
+                sub = article.title[:35] + "…" if len(article.title) > 35 else article.title
+                
+                graphics_result = self.graphics_compositor.add_tv_news_overlay(
+                    image_path=image_path,
+                    headline=headline,
+                    sub_headline=sub,
+                    is_breaking=True,
+                    output_path=image_path.replace(".png", "_final.png"),
+                )
+                
+                if graphics_result.success:
+                    logger.info(f"Graphics added: {graphics_result.output_path}")
+                    return graphics_result.output_path
+                else:
+                    logger.warning(f"Graphics failed: {graphics_result.error_message}")
+                    return image_path
+            
+            return image_path
+            
+        except Exception as e:
+            logger.error(f"News image generation failed: {e}")
+            return None
+
+    def run_entertainment_daily(self, count: int = 3) -> list[NewsVideoResult]:
+        """エンタメニュースから動画を自動生成
+        
+        Args:
+            count: 生成する動画数
+            
+        Returns:
+            NewsVideoResult のリスト
+        """
+        if not self._initialized:
+            self.initialize()
+        
+        print_header(f"Entertainment News - {count}本生成")
+        
+        # Yahoo!ニュースからエンタメ記事取得
+        articles = self.fetch_yahoo_news(
+            category="entertainment",
+            limit=count * 2,  # 予備含む
+        )
+        
+        if not articles:
+            print_error("No entertainment news found")
+            return []
+        
+        print_info(f"Found {len(articles)} articles")
+        
+        results = []
+        success_count = 0
+        
+        for i, article in enumerate(articles):
+            if success_count >= count:
+                break
+            
+            print_info(f"\n[{success_count + 1}/{count}] {article.title[:40]}...")
+            
+            # TrendingNews に変換して既存の run() を使用
+            news = TrendingNews(
+                title=article.title,
+                url=article.link,
+                source=article.source,
+                score=100 - i,  # ダミースコア
+                reason="Yahoo Entertainment",
+            )
+            
+            result = self.run(news)
+            
+            if result.success:
+                success_count += 1
+                results.append(result)
+                print_success(f"Video created: {result.video_path}")
+            else:
+                print_error(f"Failed: {result.error_message}")
+            
+            # レート制限対策
+            if i < len(articles) - 1:
+                time.sleep(5)
+        
+        print_header("Entertainment News Complete")
+        print_success(f"Generated {success_count}/{count} videos")
+        
         return results
 
 

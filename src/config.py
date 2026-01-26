@@ -32,6 +32,14 @@ class GeminiConfig:
 
 
 @dataclass
+class FalConfig:
+    """fal.ai API設定（Flux Pro）"""
+    api_key: str = field(default_factory=lambda: os.getenv("FAL_KEY", ""))
+    model: str = field(default_factory=lambda: os.getenv("FAL_MODEL", "fal-ai/flux-pro/v1.1"))
+    image_size: str = field(default_factory=lambda: os.getenv("FAL_IMAGE_SIZE", "landscape_16_9"))
+
+
+@dataclass
 class KlingConfig:
     """KLING AI SDK設定"""
     cookie: str = field(default_factory=lambda: os.getenv("KLING_COOKIE", ""))
@@ -51,6 +59,15 @@ class YouTubeConfig:
 
 
 @dataclass
+class NewsConfig:
+    """ニュース取得設定"""
+    source: str = field(default_factory=lambda: os.getenv("NEWS_SOURCE", "yahoo"))
+    category: str = field(default_factory=lambda: os.getenv("NEWS_CATEGORY", "entertainment"))
+    channel_name: str = field(default_factory=lambda: os.getenv("NEWS_CHANNEL_NAME", "FJ News 24"))
+    limit: int = field(default_factory=lambda: int(os.getenv("NEWS_LIMIT", "10")))
+
+
+@dataclass
 class VideoConfig:
     """動画編集設定"""
     fps: int = field(default_factory=lambda: int(os.getenv("VIDEO_FPS", "30")))
@@ -65,9 +82,11 @@ class VideoConfig:
 class AppConfig:
     """アプリケーション全体設定"""
     gemini: GeminiConfig = field(default_factory=GeminiConfig)
+    fal: FalConfig = field(default_factory=FalConfig)
     kling: KlingConfig = field(default_factory=KlingConfig)
     youtube: YouTubeConfig = field(default_factory=YouTubeConfig)
     video: VideoConfig = field(default_factory=VideoConfig)
+    news: NewsConfig = field(default_factory=NewsConfig)
 
     retry_count: int = field(default_factory=lambda: int(os.getenv("RETRY_COUNT", "3")))
     retry_delay: int = field(default_factory=lambda: int(os.getenv("RETRY_DELAY", "5")))
@@ -78,7 +97,9 @@ class AppConfig:
         errors, warnings = [], []
 
         if not self.gemini.api_key:
-            errors.append("GEMINI_API_KEY が未設定です")
+            warnings.append("GEMINI_API_KEY が未設定（テキスト生成に必要）")
+        if not self.fal.api_key:
+            errors.append("FAL_KEY が未設定（画像生成不可）")
         if not self.kling.cookie:
             warnings.append("KLING_COOKIE が未設定（動画生成不可）")
 
@@ -92,13 +113,20 @@ class AppConfig:
         print(f"\n[Gemini API]")
         print(f"  API Key: {'✓ 設定済み' if self.gemini.api_key else '✗ 未設定'}")
         print(f"  Text Model: {self.gemini.model_text}")
-        print(f"  Image Model: {self.gemini.model_image}")
+        print(f"\n[fal.ai (Flux Pro)]")
+        print(f"  API Key: {'✓ 設定済み' if self.fal.api_key else '✗ 未設定'}")
+        print(f"  Model: {self.fal.model}")
+        print(f"  Image Size: {self.fal.image_size}")
         print(f"\n[KLING AI]")
         print(f"  Cookie: {'✓ 設定済み' if self.kling.cookie else '✗ 未設定'}")
         print(f"  Mode: {self.kling.mode}")
         print(f"  Duration: {self.kling.duration}s")
         print(f"\n[YouTube API]")
         print(f"  Client Secrets: {self.youtube.client_secrets_file}")
+        print(f"\n[News]")
+        print(f"  Source: {self.news.source}")
+        print(f"  Category: {self.news.category}")
+        print(f"  Channel: {self.news.channel_name}")
         print(f"\n[Output]")
         print(f"  Resolution: {self.video.resolution}")
         print(f"  FPS: {self.video.fps}")

@@ -1,14 +1,12 @@
-"""画像生成モジュール - Gemini 2.5 Flash Image Generation"""
+"""画像生成モジュール - Flux Pro via fal.ai"""
 
-import base64
+import os
 import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 import httpx
 
-from google import genai
-from google.genai import types
 from PIL import Image
 import io
 
@@ -23,85 +21,85 @@ class ImageResult:
     """画像生成結果"""
     success: bool
     file_path: Optional[str] = None
+    image_url: Optional[str] = None
     error_message: Optional[str] = None
     generation_time: float = 0.0
 
 
-class ImageGenerator:
-    """Gemini APIを使用した画像生成"""
+class FluxImageGenerator:
+    """Flux Pro (fal.ai) を使用した高品質画像生成"""
 
     def __init__(self):
-        if not config.gemini.api_key:
-            raise ValueError("GEMINI_API_KEY is not set")
+        self.api_key = config.fal.api_key
+        if not self.api_key:
+            raise ValueError("FAL_KEY is not set")
 
-        # Google Genai クライアント (新API)
-        self.client = genai.Client(api_key=config.gemini.api_key)
-        self.model_name = config.gemini.model_image
+        self.model = config.fal.model
+        self.image_size = config.fal.image_size
 
-        # レート制限対策（無料プラン: 2リクエスト/分）
-        self.last_request_time = 0
-        self.min_request_interval = 30  # 30秒間隔
+        # fal_client の環境変数を設定
+        os.environ["FAL_KEY"] = self.api_key
 
-        logger.info(f"ImageGenerator initialized with {self.model_name}")
-
-    def _wait_for_rate_limit(self):
-        """レート制限を回避するため待機"""
-        elapsed = time.time() - self.last_request_time
-        if elapsed < self.min_request_interval:
-            wait_time = self.min_request_interval - elapsed
-            logger.info(f"Rate limit: waiting {wait_time:.1f}s")
-            time.sleep(wait_time)
-        self.last_request_time = time.time()
+        logger.info(f"FluxImageGenerator initialized with {self.model}")
 
     def generate(
         self,
         prompt: str,
         output_name: str,
-        reference_image: Optional[str] = None,
+        image_size: Optional[str] = None,
         retry_count: int = None,
     ) -> ImageResult:
-        """画像を生成"""
+        """画像を生成
+
+        Args:
+            prompt: 画像生成プロンプト
+            output_name: 出力ファイル名（拡張子なし）
+            image_size: 画像サイズ（landscape_16_9, portrait_16_9, square, etc）
+            retry_count: リトライ回数
+
+        Returns:
+            ImageResult
+        """
+        import fal_client
+
         start_time = time.time()
         retries = retry_count or config.retry_count
+        size = image_size or self.image_size
 
         logger.info(f"Generating image: {output_name}")
         logger.debug(f"Prompt: {prompt[:100]}...")
 
         for attempt in range(retries):
             try:
-                # レート制限対策
-                self._wait_for_rate_limit()
+                # Flux Pro API 呼び出し
+                result = fal_client.subscribe(
+                    self.model,
+                    arguments={
+                        "prompt": prompt,
+                        "image_size": size,
+                        "num_images": 1,
+                        "enable_safety_checker": False,
+                    },
+                )
 
-                # リファレンス画像がある場合
-                if reference_image and Path(reference_image).exists():
-                    result = self._generate_with_reference(prompt, reference_image)
-                else:
-                    result = self._generate_image(prompt)
+                if result and "images" in result and len(result["images"]) > 0:
+                    image_url = result["images"][0]["url"]
+                    logger.info(f"Image generated: {image_url}")
 
-                if result:
-                    # 画像を保存
+                    # 画像をダウンロードして保存
                     output_path = IMAGES_DIR / f"{output_name}.png"
-                    result.save(str(output_path))
-                    logger.info(f"Image saved: {output_path}")
-
-                    return ImageResult(
-                        success=True,
-                        file_path=str(output_path),
-                        generation_time=time.time() - start_time,
-                    )
+                    if self._download_image(image_url, str(output_path)):
+                        return ImageResult(
+                            success=True,
+                            file_path=str(output_path),
+                            image_url=image_url,
+                            generation_time=time.time() - start_time,
+                        )
 
             except Exception as e:
                 error_str = str(e).lower()
-                # レート制限エラーの場合は長めに待機
-                if "429" in error_str or "resource_exhausted" in error_str or "quota" in error_str:
-                    if attempt < retries - 1:
-                        wait_time = 60 * (attempt + 1)  # 60秒, 120秒と増加
-                        logger.warning(f"Rate limit hit, waiting {wait_time}s (attempt {attempt+1}/{retries})")
-                        time.sleep(wait_time)
-                        self.last_request_time = time.time()
-                        continue
-
                 logger.warning(f"Attempt {attempt + 1}/{retries} failed: {e}")
+
                 if attempt < retries - 1:
                     time.sleep(config.retry_delay)
 
@@ -111,180 +109,130 @@ class ImageGenerator:
             generation_time=time.time() - start_time,
         )
 
-    def _generate_image(self, prompt: str) -> Optional[Image.Image]:
-        """Geminiで画像生成"""
+    def _download_image(self, url: str, output_path: str) -> bool:
+        """画像をダウンロードして保存"""
         try:
-            # 画像生成用のプロンプト強化
-            enhanced_prompt = f"Generate a high-quality image: {prompt}"
+            with httpx.Client(timeout=60, follow_redirects=True) as client:
+                response = client.get(url)
 
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=enhanced_prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.9,
-                    response_modalities=["IMAGE", "TEXT"],
-                ),
-            )
-
-            # デバッグ: レスポンス構造を確認
-            logger.debug(f"Response type: {type(response)}")
-
-            # レスポンスから画像を抽出
-            if response.candidates:
-                for part in response.candidates[0].content.parts:
-                    logger.debug(f"Part type: {type(part)}, attrs: {dir(part)[:5]}...")
-
-                    # inline_data がある場合（base64エンコード）
-                    if hasattr(part, 'inline_data') and part.inline_data:
-                        inline_data = part.inline_data
-                        logger.debug(f"inline_data type: {type(inline_data)}")
-
-                        # data属性がbytesの場合
-                        if hasattr(inline_data, 'data'):
-                            if isinstance(inline_data.data, bytes):
-                                image_bytes = inline_data.data
-                            else:
-                                # base64文字列の場合
-                                image_bytes = base64.b64decode(inline_data.data)
-
-                            logger.debug(f"Image bytes length: {len(image_bytes)}")
-                            return Image.open(io.BytesIO(image_bytes))
-
-                    # image属性がある場合（PIL Image）
-                    if hasattr(part, 'image') and part.image:
-                        logger.debug("Found PIL Image in part.image")
-                        return part.image
-
-            logger.warning("No image in response")
-            logger.debug(f"Full response: {response}")
-            return None
+                if response.status_code == 200:
+                    # PIL で開いて PNG として保存
+                    image = Image.open(io.BytesIO(response.content))
+                    image.save(output_path, "PNG")
+                    logger.info(f"Image saved: {output_path}")
+                    return True
+                else:
+                    logger.error(f"Download failed: {response.status_code}")
+                    return False
 
         except Exception as e:
-            logger.error(f"Image generation failed: {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
-            raise
-
-    def _generate_with_reference(
-        self,
-        prompt: str,
-        reference_path: str,
-    ) -> Optional[Image.Image]:
-        """リファレンス画像を使用して生成"""
-        try:
-            # リファレンス画像を読み込み
-            ref_image = Image.open(reference_path)
-
-            # 画像をバイト列に変換
-            img_byte_arr = io.BytesIO()
-            ref_image.save(img_byte_arr, format='PNG')
-            img_bytes = img_byte_arr.getvalue()
-
-            # マルチモーダルプロンプト
-            enhanced_prompt = f"Based on the style and composition of this reference image, generate: {prompt}"
-
-            # 画像パーツを作成
-            image_part = types.Part.from_bytes(
-                data=img_bytes,
-                mime_type="image/png",
-            )
-
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[enhanced_prompt, image_part],
-                config=types.GenerateContentConfig(
-                    temperature=0.9,
-                    response_modalities=["IMAGE", "TEXT"],
-                ),
-            )
-
-            if response.candidates:
-                for part in response.candidates[0].content.parts:
-                    # inline_data がある場合
-                    if hasattr(part, 'inline_data') and part.inline_data:
-                        inline_data = part.inline_data
-                        if hasattr(inline_data, 'data'):
-                            if isinstance(inline_data.data, bytes):
-                                image_bytes = inline_data.data
-                            else:
-                                image_bytes = base64.b64decode(inline_data.data)
-                            return Image.open(io.BytesIO(image_bytes))
-
-                    # image属性がある場合
-                    if hasattr(part, 'image') and part.image:
-                        return part.image
-
-            return None
-
-        except Exception as e:
-            logger.error(f"Reference generation failed: {e}")
-            raise
+            logger.error(f"Download error: {e}")
+            return False
 
     def generate_batch(
         self,
         prompts: list[tuple[str, str]],  # [(prompt, output_name), ...]
-        reference_image: Optional[str] = None,
+        image_size: Optional[str] = None,
     ) -> list[ImageResult]:
         """複数画像をバッチ生成"""
         results = []
 
         for i, (prompt, name) in enumerate(prompts):
             logger.info(f"Batch progress: {i + 1}/{len(prompts)}")
-            result = self.generate(prompt, name, reference_image)
+            result = self.generate(prompt, name, image_size)
             results.append(result)
 
-            # レート制限対策
+            # API負荷軽減のため少し待機
             if i < len(prompts) - 1:
-                time.sleep(2)
+                time.sleep(1)
 
         return results
 
-
-class NanoBananaGenerator:
-    """Nano Banana APIを使用した画像生成（代替）"""
-
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key
-        self.base_url = "https://api.nano-ai.io/v1"  # 仮のURL
-        logger.info("NanoBananaGenerator initialized")
-
-    def generate(
+    def generate_news_image(
         self,
-        prompt: str,
-        output_name: str,
-        model: str = "flux-1.1-pro-ultra",
-        aspect_ratio: str = "16:9",
+        news_title: str,
+        news_summary: str,
+        style: str = "photorealistic",
+        output_name: str = "news_image",
     ) -> ImageResult:
-        """Nano Banana APIで画像生成"""
-        start_time = time.time()
+        """ニュース用の画像を生成
 
-        # 注: 実際のNano Banana APIエンドポイントに合わせて実装
-        # 現在はプレースホルダー
+        Args:
+            news_title: ニュースタイトル
+            news_summary: ニュース概要
+            style: 画像スタイル（photorealistic, cinematic, etc）
+            output_name: 出力ファイル名
 
-        logger.warning("NanoBanana API not configured - using placeholder")
+        Returns:
+            ImageResult
+        """
+        # ニュース向けプロンプトを構築
+        prompt = self._build_news_prompt(news_title, news_summary, style)
+        return self.generate(prompt, output_name)
 
-        return ImageResult(
-            success=False,
-            error_message="NanoBanana API not configured",
-            generation_time=time.time() - start_time,
+    def _build_news_prompt(
+        self,
+        title: str,
+        summary: str,
+        style: str,
+    ) -> str:
+        """ニュース画像用のプロンプトを構築"""
+        # スタイル別のプレフィックス
+        style_prefixes = {
+            "photorealistic": "Photorealistic news photography style,",
+            "cinematic": "Cinematic news broadcast style, dramatic lighting,",
+            "documentary": "Documentary photography style, natural lighting,",
+            "infographic": "Clean infographic style, data visualization,",
+        }
+
+        prefix = style_prefixes.get(style, style_prefixes["photorealistic"])
+
+        # 品質タグ
+        quality_tags = (
+            "8K resolution, professional news photography, "
+            "sharp focus, high detail, broadcast quality"
         )
 
+        # 最終プロンプト
+        prompt = f"{prefix} {title}. {summary}. {quality_tags}"
 
-def create_image_generator(use_nano_banana: bool = False) -> ImageGenerator:
-    """画像生成器のファクトリー関数"""
-    if use_nano_banana:
-        return NanoBananaGenerator()
-    return ImageGenerator()
+        return prompt
+
+
+# 後方互換性のためのエイリアス
+class ImageGenerator(FluxImageGenerator):
+    """ImageGenerator のエイリアス（後方互換性）"""
+    pass
+
+
+def create_image_generator(provider: str = "flux") -> FluxImageGenerator:
+    """画像生成器のファクトリー関数
+
+    Args:
+        provider: プロバイダー名（"flux" のみサポート）
+
+    Returns:
+        FluxImageGenerator
+    """
+    if provider == "flux":
+        return FluxImageGenerator()
+    else:
+        raise ValueError(f"Unknown provider: {provider}. Use 'flux'.")
 
 
 if __name__ == "__main__":
     # テスト実行
     try:
-        generator = ImageGenerator()
+        generator = FluxImageGenerator()
         result = generator.generate(
-            prompt="A beautiful cyberpunk city at night with neon lights, 8K quality",
-            output_name="test_image",
+            prompt="Breaking news broadcast scene, Tokyo Shibuya crossing at night, "
+                   "rainy weather, neon lights reflecting on wet pavement, "
+                   "cinematic news camera angle, photorealistic, 8K quality",
+            output_name="test_flux_image",
         )
         print(f"Result: {result}")
+        if result.success:
+            print(f"Image saved to: {result.file_path}")
+            print(f"Image URL: {result.image_url}")
     except Exception as e:
         print(f"Error: {e}")

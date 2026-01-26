@@ -1,0 +1,324 @@
+
+==================================================
+Daily News Video Generation - 1本
+==================================================
+
+
+==================================================
+News Automation Pipeline - 初期化
+==================================================
+
+[01/15/26 00:07:05] INFO     RSSFetcher initialized                        
+[01/15/26 00:07:05] INFO     TrendDetector initialized (Google Trends +    
+                             RSS)                                          
+✓ TrendDetector initialized
+[01/15/26 00:07:05] INFO     NewsScraper initialized                       
+✓ NewsScraper initialized
+                    INFO     NewsScraper initialized                       
+[01/15/26 00:07:05] INFO     NewsExplainer initialized                     
+✓ NewsExplainer initialized
+[01/15/26 00:07:05] INFO     NarrationGenerator initialized (remaining     
+                             quota: 8620 chars)                            
+✓ NarrationGenerator initialized
+[01/15/26 00:07:05] INFO     ImageGenerator initialized with               
+                             gemini-2.0-flash-exp-image-generation         
+✓ ImageGenerator initialized
+[01/15/26 00:07:05] INFO     VeoVideoGenerator initialized with veo-3.1    
+✓ VeoVideoGenerator initialized
+[01/15/26 00:07:05] INFO     VideoAnimator initialized                     
+✓ VideoAnimator initialized
+[01/15/26 00:07:05] INFO     SubtitleRenderer initialized (font: Hiragino  
+                             Sans W6)                                      
+✓ SubtitleRenderer initialized
+[01/15/26 00:07:05] INFO     VideoEditor initialized (1920x1080 @ 30fps)   
+✓ VideoEditor initialized
+i Pipeline initialization complete
+
+==================================================
+Daily News Videos - 1本生成
+==================================================
+
+                    ERROR    Failed to get trending keywords:              
+                             Retry.__init__() got an unexpected keyword    
+                             argument 'method_whitelist'                   
+                    WARNING  Google Trends failed, falling back to RSS-only
+                             mode                                          
+                    INFO     Using RSS-only mode (Google Trends            
+                             unavailable)                                  
+                    INFO     Fetching Yahoo! News RSS: top                 
+                    INFO     Fetched 5 articles from Yahoo! News           
+                    INFO     Fetching Yahoo! News RSS: domestic            
+                    INFO     Fetched 5 articles from Yahoo! News           
+                    INFO     Fetching Yahoo! News RSS: business            
+[01/15/26 00:07:06] INFO     Fetched 5 articles from Yahoo! News           
+                    INFO     Fetching Yahoo! News RSS: it                  
+                    INFO     Fetched 5 articles from Yahoo! News           
+                    INFO     Fetching Yahoo! News RSS: science             
+                    INFO     Fetched 5 articles from Yahoo! News           
+                    INFO     Fetching Yahoo! News RSS: world               
+                    INFO     Fetched 5 articles from Yahoo! News           
+[01/15/26 00:07:06] INFO     Got 27 news items from RSS only               
+                    INFO     Scored 12 news items                          
+                    INFO     Selected 2 best news for video                
+                    INFO       1. [45pt] 立憲と公明 新党結成へ最終調整...  
+                    INFO       2. [45pt] 突然の衆院選 戸惑う立候補予定者...
+i Found 2 candidate news
+i 
+[1/1] 立憲と公明 新党結成へ最終調整...
+[01/15/26 00:07:06] INFO     Processing: 立憲と公明 新党結成へ最終調整...  
+[01/15/26 00:07:06] INFO     Scraping:                                     
+                             https://news.yahoo.co.jp/pickup/6566185?source
+                             =rss                                          
+                    INFO     Scraped (BS4): 立憲と公明 新党結成へ最終調整 -
+                             Yahoo!ニュース... (257 chars)                 
+[01/15/26 00:07:06] INFO     Explaining: 立憲と公明 新党結成へ最終調整 -   
+                             Yahoo!ニュース...                             
+[01/15/26 00:07:10] INFO     Generated explanation: ~64s                   
+[01/15/26 00:07:11] INFO     Generating narration: 324 chars, voice=Rachel 
+                             (id: 21m00Tcm...)                             
+[01/15/26 00:07:20] INFO     Quota updated: +324 chars, remaining:         
+                             8296/10000                                    
+                    INFO     Narration saved:                              
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/audio/narration_20260115_000706.mp3        
+                             (~56.3s)                                      
+[01/15/26 00:07:20] INFO     Generating image 1/3 with enhanced prompt     
+[01/15/26 00:07:20] INFO     Generating image: bg_20260115_000706_00       
+[01/15/26 00:07:26] INFO     Image saved:                                  
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/images/bg_20260115_000706_00.png           
+[01/15/26 00:07:27] INFO     Generating image 2/3 with enhanced prompt     
+[01/15/26 00:07:27] INFO     Generating image: bg_20260115_000706_01       
+                    INFO     Rate limit: waiting 23.6s                     
+[01/15/26 00:07:56] INFO     Image saved:                                  
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/images/bg_20260115_000706_01.png           
+[01/15/26 00:07:57] INFO     Generating image 3/3 with enhanced prompt     
+[01/15/26 00:07:57] INFO     Generating image: bg_20260115_000706_02       
+                    INFO     Rate limit: waiting 23.2s                     
+[01/15/26 00:08:26] INFO     Image saved:                                  
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/images/bg_20260115_000706_02.png           
+[01/15/26 00:08:27] INFO     ==============================================
+                             ========================                      
+                    INFO     🎬 DYNAMIC VIDEO GENERATION PIPELINE          
+                    INFO     ==============================================
+                             ========================                      
+                    INFO     News Title:                                   
+                             え？立憲民主党と公明党が新党結成！？政界再編の
+                             可能性を解説！...                             
+                    INFO     Category Detected: default                    
+                    INFO     Total Clips: 3                                
+                    INFO     Duration per clip: 10s                        
+                    INFO     Veo 3.1 Enabled: True                         
+                    INFO     ==============================================
+                             ========================                      
+i Video Generation: 3 clips
+i Category: default | Duration: 10s each
+                    INFO     ----------------------------------------------
+                             ----                                          
+                    INFO     📹 Processing clip 1/3                        
+                    INFO        Scene type: intro                          
+                    INFO        Image: bg_20260115_000706_00.png           
+i 🎬 Generating DYNAMIC video 1/3 with Veo 3.1...
+[01/15/26 00:08:27] INFO     Generated dynamic prompt for [default/intro]  
+                    INFO        Prompt length: 575 chars                   
+                    INFO        Prompt preview: Smooth tracking shot       
+                             through abstract environment, camera gliding  
+                             forward, volumetric light beams sh...         
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     🎬 VEO 3.1 DYNAMIC VIDEO GENERATION           
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     Model: veo-3.1                                
+                    INFO     Image: bg_20260115_000706_00.png              
+                    INFO     Duration: 10s | Resolution: 1080p             
+                    INFO     Aspect Ratio: 16:9 | Audio: True              
+                    INFO     Motion Strength: 0.95 | Guidance: 9.0         
+                    INFO     ----------------------------------------------
+                             --------------                                
+                    INFO     PROMPT:                                       
+                             Smooth tracking shot through abstract         
+                             environment, camera gliding forward,          
+                             volumetric light beams shifting slowly, dust  
+                             particles floating in air, atmospheric fog    
+                             rolling gently, lens flares from light        
+                             sources, depth layers moving at different     
+                             parallax speeds, cinematic establishing shot, 
+                             professional documentary quality. dynamic     
+                             lighting that shifts and evolves, parallax    
+                             depth layers creating 3D effect, ray-traced   
+                             reflections and shadows. high production      
+                             value, broadcast quality, photorealistic      
+                             rendering, 8K cinematic quality, professional 
+                             videography, seamless motion                  
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     Image size: 826.6 KB                          
+                    INFO     Enhanced prompt length: 1169 chars            
+                    INFO     Calling Veo 3.1 API...                        
+                    ERROR    Video generation failed: 'Models' object has  
+                             no attribute 'generate_video'                 
+                    WARNING     ⚠️ Veo failed: 'Models' object has no       
+                             attribute 'generate_video'                    
+i    Falling back to FFmpeg...
+i Using FFmpeg fallback for video 1...
+                    INFO        Using FFmpeg Ken Burns fallback            
+[01/15/26 00:08:27] INFO     Animating:                                    
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/images/bg_20260115_000706_00.png (dynamic, 
+                             10s)                                          
+[01/15/26 00:08:33] INFO        ✅ FFmpeg success:                         
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/videos/animated_20260115_000706_00.mp4     
+                    INFO     ----------------------------------------------
+                             ----                                          
+                    INFO     📹 Processing clip 2/3                        
+                    INFO        Scene type: detail                         
+                    INFO        Image: bg_20260115_000706_01.png           
+i 🎬 Generating DYNAMIC video 2/3 with Veo 3.1...
+[01/15/26 00:08:33] INFO     Generated dynamic prompt for [default/detail] 
+                    INFO        Prompt length: 603 chars                   
+                    INFO        Prompt preview: Camera push with continuous
+                             motion, focus pulling through scene layers,   
+                             environmental elements swayi...               
+                    INFO     Rate limit: waiting 53.9s                     
+[01/15/26 00:09:27] INFO     ==============================================
+                             ==============                                
+                    INFO     🎬 VEO 3.1 DYNAMIC VIDEO GENERATION           
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     Model: veo-3.1                                
+                    INFO     Image: bg_20260115_000706_01.png              
+                    INFO     Duration: 10s | Resolution: 1080p             
+                    INFO     Aspect Ratio: 16:9 | Audio: True              
+                    INFO     Motion Strength: 0.95 | Guidance: 9.0         
+                    INFO     ----------------------------------------------
+                             --------------                                
+                    INFO     PROMPT:                                       
+                             Camera push with continuous motion, focus     
+                             pulling through scene layers, environmental   
+                             elements swaying naturally with implied wind, 
+                             light beams rotating slowly, shadows moving   
+                             across surfaces, particles drifting through   
+                             frame, reflections rippling, texture details  
+                             revealed as camera approaches. ray-traced     
+                             reflections and shadows, cinematic lens       
+                             effects including anamorphic flares, realistic
+                             motion blur on moving objects, professional   
+                             color grading with cinematic LUT. high        
+                             production value, broadcast quality,          
+                             photorealistic rendering, 8K cinematic        
+                             quality, professional videography, seamless   
+                             motion                                        
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     Image size: 841.4 KB                          
+                    INFO     Enhanced prompt length: 1209 chars            
+                    INFO     Calling Veo 3.1 API...                        
+                    ERROR    Video generation failed: 'Models' object has  
+                             no attribute 'generate_video'                 
+[01/15/26 00:09:27] WARNING     ⚠️ Veo failed: 'Models' object has no       
+                             attribute 'generate_video'                    
+i    Falling back to FFmpeg...
+i Using FFmpeg fallback for video 2...
+                    INFO        Using FFmpeg Ken Burns fallback            
+[01/15/26 00:09:27] INFO     Animating:                                    
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/images/bg_20260115_000706_01.png           
+                             (ken_burns, 10s)                              
+[01/15/26 00:09:32] INFO        ✅ FFmpeg success:                         
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/videos/animated_20260115_000706_01.mp4     
+                    INFO     ----------------------------------------------
+                             ----                                          
+                    INFO     📹 Processing clip 3/3                        
+                    INFO        Scene type: outro                          
+                    INFO        Image: bg_20260115_000706_02.png           
+i 🎬 Generating DYNAMIC video 3/3 with Veo 3.1...
+[01/15/26 00:09:32] INFO     Generated dynamic prompt for [default/outro]  
+                    INFO        Prompt length: 511 chars                   
+                    INFO        Prompt preview: Graceful camera pull-back  
+                             with continuous motion, elements settling,    
+                             wind effect on floating particl...            
+                    INFO     Rate limit: waiting 54.6s                     
+[01/15/26 00:10:27] INFO     ==============================================
+                             ==============                                
+                    INFO     🎬 VEO 3.1 DYNAMIC VIDEO GENERATION           
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     Model: veo-3.1                                
+                    INFO     Image: bg_20260115_000706_02.png              
+                    INFO     Duration: 10s | Resolution: 1080p             
+                    INFO     Aspect Ratio: 16:9 | Audio: True              
+                    INFO     Motion Strength: 0.95 | Guidance: 9.0         
+                    INFO     ----------------------------------------------
+                             --------------                                
+                    INFO     PROMPT:                                       
+                             Graceful camera pull-back with continuous     
+                             motion, elements settling, wind effect on     
+                             floating particles, light fading to amber,    
+                             gentle camera rotation as we retreat,         
+                             perspective widening, ambient atmosphere      
+                             deepening, professional fade out. realistic   
+                             physics simulation on particles, ambient      
+                             occlusion for depth, smooth 60fps fluid       
+                             motion, realistic motion blur on moving       
+                             objects. high production value, broadcast     
+                             quality, photorealistic rendering, 8K         
+                             cinematic quality, professional videography,  
+                             seamless motion                               
+                    INFO     ==============================================
+                             ==============                                
+                    INFO     Image size: 661.3 KB                          
+                    INFO     Enhanced prompt length: 1123 chars            
+                    INFO     Calling Veo 3.1 API...                        
+                    ERROR    Video generation failed: 'Models' object has  
+                             no attribute 'generate_video'                 
+[01/15/26 00:10:27] WARNING     ⚠️ Veo failed: 'Models' object has no       
+                             attribute 'generate_video'                    
+i    Falling back to FFmpeg...
+i Using FFmpeg fallback for video 3...
+                    INFO        Using FFmpeg Ken Burns fallback            
+[01/15/26 00:10:27] INFO     Animating:                                    
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/images/bg_20260115_000706_02.png (zoom_in, 
+                             10s)                                          
+[01/15/26 00:10:30] INFO        ✅ FFmpeg success:                         
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/videos/animated_20260115_000706_02.mp4     
+                    INFO     ==============================================
+                             ========================                      
+                    INFO     🏁 Video generation complete: 3/3 clips       
+                    INFO     ==============================================
+                             ========================                      
+[01/15/26 00:10:31] INFO     Created 17 timed subtitles                    
+[01/15/26 00:12:00] INFO     Adding 17 subtitles to                        
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/final/temp_20260115_000706.mp4             
+[01/15/26 00:12:22] INFO     Subtitles added:                              
+                             /Users/fuji/work/fuji/ai-video-automation/outp
+                             ut/final/news_20260115_000706.mp4             
+  最終合成中... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:14
+✓ 完成: 
+/Users/fuji/work/fuji/ai-video-automation/output/final/news_20260115_000706
+.mp4 (316.6s)
+✓ Video created: 
+/Users/fuji/work/fuji/ai-video-automation/output/final/news_20260115_000706
+.mp4
+
+==================================================
+Daily Generation Complete
+==================================================
+
+✓ Generated 1/1 videos
+
+==================================================
+Generation Summary
+==================================================
+
+✓ 成功: 1/1
+i   ✓ え？立憲民主党と公明党が新党結成！？政界再編の可能性を解説！... → 
+/Users/fuji/work/fuji/ai-video-automation/output/final/news_20260115_000706
+.mp4
