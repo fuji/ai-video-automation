@@ -324,6 +324,19 @@ class NewsAutomationPipeline:
             logger.info(f"Generating image {i+1}/3 with enhanced prompt")
             result = self.image_generator.generate(prompt, output_name)
             if result.success:
+                # 全画像にニュースグラフィックを追加
+                if self.graphics_compositor:
+                    headline = explanation.title[:18] + "…" if len(explanation.title) > 18 else explanation.title
+                    graphics_result = self.graphics_compositor.add_tv_news_overlay(
+                        image_path=result.file_path,
+                        headline=headline,
+                        sub_headline=explanation.title[:35] if len(explanation.title) > 35 else "",
+                        is_breaking=True,
+                        output_path=result.file_path,  # 上書き
+                    )
+                    if graphics_result.success:
+                        logger.info(f"Added FJ News 24 graphics to image {i+1}")
+                
                 image_paths.append(result.file_path)
             time.sleep(1)
 

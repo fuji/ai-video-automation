@@ -414,7 +414,7 @@ class VeoVideoGenerator:
 
             # Veo 3.1 Image-to-Video API（非同期操作）
             logger.info("Calling Veo 3.1 API...")
-            operation = self.client.models.generate_video(
+            operation = self.client.models.generate_videos(
                 model=self.model,
                 prompt=enhanced_prompt,
                 config=types.GenerateVideoConfig(
@@ -586,7 +586,7 @@ class VeoVideoGenerator:
             logger.info(f"Generating video from prompt: {prompt[:100]}...")
 
             # Veo 3.1 Text-to-Video API（非同期操作）
-            operation = self.client.models.generate_video(
+            operation = self.client.models.generate_videos(
                 model=self.model,
                 prompt=prompt,
                 config=types.GenerateVideoConfig(
