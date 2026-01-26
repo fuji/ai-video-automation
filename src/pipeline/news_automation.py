@@ -157,7 +157,7 @@ class NewsAutomationPipeline:
     def run(
         self,
         news: TrendingNews,
-        difficulty: str = "中学生",
+        difficulty: str = "若者",
         target_duration: int = 60,
         voice: str = "Rachel",
         add_bgm: bool = False,
