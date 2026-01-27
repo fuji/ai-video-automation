@@ -206,11 +206,11 @@ class VeoVideoGenerator:
         "film grain for cinematic texture",
     ]
 
-    def __init__(self, model: str = "veo-3.1"):
+    def __init__(self, model: str = "veo-3.1-generate-preview"):
         """Veo動画生成クライアント初期化
 
         Args:
-            model: 使用するモデル ("veo-3.1" または "veo-3-fast")
+            model: 使用するモデル ("veo-3.1-generate-preview" など)
         """
         if not config.gemini.api_key:
             raise ValueError("GEMINI_API_KEY is not set")
@@ -414,17 +414,23 @@ class VeoVideoGenerator:
 
             # Veo 3.1 Image-to-Video API（非同期操作）
             logger.info("Calling Veo 3.1 API...")
+            
+            # 参照画像を設定（ASSETタイプで入力画像として使用）
+            reference_image = types.VideoGenerationReferenceImage(
+                image=types.Image(
+                    image_bytes=image_data,
+                    mime_type=mime_type,
+                ),
+                referenceType=types.VideoGenerationReferenceType.ASSET,
+            )
+            
             operation = self.client.models.generate_videos(
                 model=self.model,
                 prompt=enhanced_prompt,
-                config=types.GenerateVideoConfig(
-                    image=types.Image(
-                        image_bytes=image_data,
-                        mime_type=mime_type,
-                    ),
-                    aspect_ratio=aspect_ratio,
-                    # Note: Veo API の利用可能なパラメータは限定的
-                    # プロンプトで動きを制御することが主な手法
+                config=types.GenerateVideosConfig(
+                    referenceImages=[reference_image],
+                    aspectRatio=aspect_ratio,
+                    durationSeconds=duration,
                 ),
             )
 
@@ -589,7 +595,7 @@ class VeoVideoGenerator:
             operation = self.client.models.generate_videos(
                 model=self.model,
                 prompt=prompt,
-                config=types.GenerateVideoConfig(
+                config=types.GenerateVideosConfig(
                     aspect_ratio=aspect_ratio,
                 ),
             )
