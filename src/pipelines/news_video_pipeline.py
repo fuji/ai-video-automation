@@ -225,38 +225,69 @@ class NewsVideoPipeline:
         self,
         scenes: list[Scene],
         output_prefix: str,
-    ) -> str:
-        """シーンの字幕からナレーション音声を生成"""
+        closing_text: str = "",
+    ) -> tuple[str, float]:
+        """シーンの字幕からナレーション音声を生成（締めナレーション含む）
+        
+        Returns:
+            tuple: (audio_path, total_duration)
+        """
         
         console.print("\n[cyan]🎤 ナレーション生成中...[/cyan]")
         
         # 全シーンの字幕を結合
         full_text = "。".join([scene.subtitle for scene in scenes]) + "。"
         
-        output_path = str(AUDIO_DIR / f"{output_prefix}_narration.mp3")
+        main_path = str(AUDIO_DIR / f"{output_prefix}_narration.mp3")
+        result = self.narration_gen.generate(text=full_text, output_path=main_path)
         
-        result = self.narration_gen.generate(
-            text=full_text,
-            output_path=output_path,
-        )
-        
-        if result.success:
-            console.print(f"  ✅ 音声: {result.file_path} ({result.duration_seconds:.1f}秒)")
-            return result.file_path
-        else:
+        if not result.success:
             console.print(f"  ❌ 音声生成失敗: {result.error_message}")
-            return None
+            return None, 0
+        
+        console.print(f"  ✅ 本編音声: {result.file_path} ({result.duration_seconds:.1f}秒)")
+        
+        # 締めナレーションがあれば追加
+        if closing_text:
+            console.print("  🎤 締めナレーション生成中...")
+            closing_path = str(AUDIO_DIR / f"{output_prefix}_closing.mp3")
+            closing_result = self.narration_gen.generate(text=closing_text, output_path=closing_path)
+            
+            if closing_result.success:
+                console.print(f"  ✅ 締め音声: {closing_result.file_path} ({closing_result.duration_seconds:.1f}秒)")
+                
+                # 音声を結合
+                combined_path = str(AUDIO_DIR / f"{output_prefix}_full.mp3")
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-i", main_path, "-i", closing_path,
+                    "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[a]",
+                    "-map", "[a]", combined_path
+                ], capture_output=True)
+                
+                # 結合後の長さを取得
+                probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                     "-of", "default=noprint_wrappers=1:nokey=1", combined_path],
+                    capture_output=True, text=True
+                )
+                total_duration = float(probe.stdout.strip())
+                console.print(f"  ✅ 合計音声: {total_duration:.1f}秒")
+                return combined_path, total_duration
+        
+        return result.file_path, result.duration_seconds
     
     def compose_final_video(
         self,
         scenes: list[Scene],
         audio_path: str,
+        audio_duration: float,
         headline: str,
         sub_headline: str,
         output_prefix: str,
         is_breaking: bool = True,
     ) -> str:
-        """全シーンを結合して最終動画を作成"""
+        """全シーンを結合して最終動画を作成（音声長に合わせてスロー調整）"""
         
         console.print("\n[cyan]🎬 最終動画を合成中...[/cyan]")
         
@@ -349,23 +380,57 @@ class NewsVideoPipeline:
             overlaid_videos.append(overlaid_path)
             console.print(f"  ✅ シーン{scene.index + 1} オーバーレイ適用")
         
-        # 2. 動画を結合
-        concat_list_path = str(temp_dir / "concat_list.txt")
-        with open(concat_list_path, "w") as f:
-            for video_path in overlaid_videos:
-                f.write(f"file '{video_path}'\n")
+        # 2. 各シーンの長さを取得
+        def get_duration(path):
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", path],
+                capture_output=True, text=True
+            )
+            return float(probe.stdout.strip())
+        
+        video_durations = [get_duration(v) for v in overlaid_videos]
+        total_video_duration = sum(video_durations)
+        
+        console.print(f"  動画合計: {total_video_duration:.1f}秒, 音声: {audio_duration:.1f}秒")
+        
+        # 3. 音声が長い場合、最後のシーンをスローにして調整
+        if audio_duration > total_video_duration:
+            other_scenes_duration = sum(video_durations[:-1])
+            needed_last_scene = audio_duration - other_scenes_duration + 0.3
+            slowdown_factor = needed_last_scene / video_durations[-1]
+            
+            console.print(f"  最後のシーンを {slowdown_factor:.2f}x スローに調整")
+            
+            # 最後のシーンをスロー化
+            last_scene_slow = str(temp_dir / "last_scene_slow.mp4")
+            subprocess.run([
+                "ffmpeg", "-y", "-i", overlaid_videos[-1],
+                "-filter:v", f"setpts={slowdown_factor}*PTS",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-an", last_scene_slow
+            ], capture_output=True)
+            overlaid_videos[-1] = last_scene_slow
+        
+        # 4. 動画を結合（filter_complex方式）
+        inputs = []
+        for v in overlaid_videos:
+            inputs.extend(["-i", v])
+        
+        n = len(overlaid_videos)
+        filter_str = "".join([f"[{i}:v]" for i in range(n)]) + f"concat=n={n}:v=1:a=0[v]"
         
         concat_video_path = str(temp_dir / "concat.mp4")
-        subprocess.run([
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", concat_list_path,
-            "-c", "copy",
+        cmd = ["ffmpeg", "-y"] + inputs + [
+            "-filter_complex", filter_str,
+            "-map", "[v]",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
             concat_video_path
-        ], capture_output=True)
+        ]
+        subprocess.run(cmd, capture_output=True)
         console.print("  ✅ 動画結合完了")
         
-        # 3. 音声を追加
+        # 5. 音声を追加
         final_path = str(VIDEOS_DIR / f"{output_prefix}_final.mp4")
         subprocess.run([
             "ffmpeg", "-y",
@@ -386,10 +451,20 @@ class NewsVideoPipeline:
         article_text: str,
         headline: str,
         sub_headline: str = "",
+        closing_text: str = "",
         output_prefix: Optional[str] = None,
         is_breaking: bool = True,
     ) -> NewsVideoResult:
-        """パイプライン全体を実行"""
+        """パイプライン全体を実行
+        
+        Args:
+            article_text: 記事本文
+            headline: ヘッドライン
+            sub_headline: サブヘッドライン
+            closing_text: 締めナレーション（省略可）
+            output_prefix: 出力ファイル名プレフィックス
+            is_breaking: BREAKING NEWSバナー表示
+        """
         
         if output_prefix is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -409,13 +484,16 @@ class NewsVideoPipeline:
             # 3. 動画生成
             scenes = self.generate_scene_videos(scenes, output_prefix)
             
-            # 4. ナレーション生成
-            audio_path = self.generate_narration(scenes, output_prefix)
+            # 4. ナレーション生成（締め含む）
+            audio_path, audio_duration = self.generate_narration(
+                scenes, output_prefix, closing_text=closing_text
+            )
             
-            # 5. 最終合成
+            # 5. 最終合成（音声長に合わせてスロー調整）
             final_path = self.compose_final_video(
                 scenes=scenes,
                 audio_path=audio_path,
+                audio_duration=audio_duration,
                 headline=headline,
                 sub_headline=sub_headline,
                 output_prefix=output_prefix,
