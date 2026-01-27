@@ -14,13 +14,21 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
 from rich.console import Console
-from anthropic import Anthropic
+import google.generativeai as genai
 
-from src.generators.flux_image_generator import FluxImageGenerator
-from src.generators.luma_video_generator import LumaVideoGenerator
+import fal_client
+import httpx
+import time
+
+from src.generators.image_generator import FluxImageGenerator
+from src.config import config
 from src.generators.narration_generator import NarrationGenerator
 from src.editors.news_graphics import NewsGraphicsCompositor
-from src.config import IMAGES_DIR, VIDEOS_DIR, AUDIO_DIR
+from src.config import IMAGES_DIR, VIDEOS_DIR, OUTPUT_DIR
+
+# AUDIO_DIR がなければ作成
+AUDIO_DIR = OUTPUT_DIR / "audio"
+AUDIO_DIR.mkdir(exist_ok=True)
 
 console = Console()
 
@@ -63,12 +71,15 @@ class NewsVideoPipeline:
         
         # ジェネレーター初期化
         self.image_gen = FluxImageGenerator()
-        self.video_gen = LumaVideoGenerator()
         self.narration_gen = NarrationGenerator()
         self.compositor = NewsGraphicsCompositor(channel_name=channel_name)
         
-        # Anthropic client for scene analysis
-        self.anthropic = Anthropic()
+        # Gemini for scene analysis
+        genai.configure(api_key=config.gemini.api_key)
+        self.gemini = genai.GenerativeModel("gemini-2.0-flash")
+        
+        # FAL API key for Luma
+        os.environ["FAL_KEY"] = config.fal.api_key
         
         console.print(f"[green]NewsVideoPipeline initialized[/green]")
         console.print(f"  Channel: {channel_name}")
@@ -114,14 +125,10 @@ class NewsVideoPipeline:
 
         console.print("\n[cyan]📝 記事を分析中...[/cyan]")
         
-        response = self.anthropic.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = self.gemini.generate_content(prompt)
         
         # JSONを抽出
-        content = response.content[0].text
+        content = response.text
         json_start = content.find("{")
         json_end = content.rfind("}") + 1
         json_str = content[json_start:json_end]
@@ -157,12 +164,12 @@ class NewsVideoPipeline:
             result = self.image_gen.generate(
                 prompt=scene.image_prompt,
                 output_name=output_name,
-                aspect_ratio="9:16",
+                image_size="portrait_16_9",  # 縦動画用
             )
             
             if result.success:
-                scene.image_path = result.output_path
-                console.print(f"  ✅ シーン{scene.index + 1}: {result.output_path}")
+                scene.image_path = result.file_path
+                console.print(f"  ✅ シーン{scene.index + 1}: {result.file_path}")
             else:
                 console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
         
@@ -173,9 +180,9 @@ class NewsVideoPipeline:
         scenes: list[Scene],
         output_prefix: str,
     ) -> list[Scene]:
-        """各シーンの動画を生成"""
+        """各シーンの動画を生成（Luma Dream Machine via fal.ai）"""
         
-        console.print("\n[cyan]🎬 シーン動画を生成中...[/cyan]")
+        console.print("\n[cyan]🎬 シーン動画を生成中 (Luma)...[/cyan]")
         
         for scene in scenes:
             if not scene.image_path:
@@ -184,17 +191,33 @@ class NewsVideoPipeline:
             
             output_path = str(VIDEOS_DIR / f"{output_prefix}_scene{scene.index + 1}.mp4")
             
-            result = self.video_gen.generate(
-                image_path=scene.image_path,
-                prompt=scene.video_prompt,
-                output_path=output_path,
-            )
-            
-            if result.success:
-                scene.video_path = result.output_path
-                console.print(f"  ✅ シーン{scene.index + 1}: {result.output_path}")
-            else:
-                console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
+            try:
+                # 画像をfal.aiにアップロード
+                image_url = fal_client.upload_file(scene.image_path)
+                console.print(f"  📤 シーン{scene.index + 1}: 画像アップロード完了")
+                
+                # Luma API呼び出し
+                result = fal_client.subscribe(
+                    "fal-ai/luma-dream-machine/image-to-video",
+                    arguments={
+                        "prompt": scene.video_prompt,
+                        "image_url": image_url,
+                        "aspect_ratio": "9:16",
+                    },
+                    with_logs=False,
+                )
+                
+                # 動画をダウンロード
+                video_url = result["video"]["url"]
+                response = httpx.get(video_url)
+                with open(output_path, "wb") as f:
+                    f.write(response.content)
+                
+                scene.video_path = output_path
+                console.print(f"  ✅ シーン{scene.index + 1}: {output_path}")
+                
+            except Exception as e:
+                console.print(f"  ❌ シーン{scene.index + 1}: {str(e)}")
         
         return scenes
     
