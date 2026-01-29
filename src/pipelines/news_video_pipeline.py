@@ -21,6 +21,7 @@ import httpx
 import time
 
 from src.generators.image_generator import FluxImageGenerator
+from src.generators.remotion_generator import RemotionGenerator, SceneConfig
 from src.config import config, get_daily_output_dirs
 from src.generators.edge_tts_generator import EdgeTTSGenerator  # 無料TTS
 from src.editors.news_graphics import NewsGraphicsCompositor
@@ -61,10 +62,12 @@ class NewsVideoPipeline:
         channel_name: str = "FJ News 24",
         num_scenes: int = 4,  # 4シーンで約20秒のベース動画
         scene_duration: float = 5.0,
+        use_remotion: bool = True,  # Remotion を使う（無料）か Luma を使う（有料）
     ):
         self.channel_name = channel_name
         self.num_scenes = num_scenes
         self.scene_duration = scene_duration
+        self.use_remotion = use_remotion
         
         # 日付ベースの出力ディレクトリ
         self.dirs = get_daily_output_dirs()
@@ -79,16 +82,25 @@ class NewsVideoPipeline:
             channel_tagline="世界のおもしろニュース",
         ))
         
+        # Remotion ジェネレーター（無料モーショングラフィックス）
+        if use_remotion:
+            self.remotion_gen = RemotionGenerator()
+            console.print(f"[cyan]🎬 Remotion モード（無料）[/cyan]")
+        else:
+            self.remotion_gen = None
+        
         # Gemini for scene analysis
         self.gemini_client = genai.Client(api_key=config.gemini.api_key)
         
-        # FAL API key for Luma
-        os.environ["FAL_KEY"] = config.fal.api_key
+        # FAL API key for Luma (Remotion使わない場合)
+        if not use_remotion:
+            os.environ["FAL_KEY"] = config.fal.api_key
         
         console.print(f"[green]NewsVideoPipeline initialized[/green]")
         console.print(f"  Output: {self.dirs['root']}")
         console.print(f"  Channel: {channel_name}")
         console.print(f"  Scenes: {num_scenes} x {scene_duration}s = {num_scenes * scene_duration}s")
+        console.print(f"  Mode: {'Remotion (無料)' if use_remotion else 'Luma (有料)'}")
     
     def analyze_article(
         self,
@@ -189,6 +201,122 @@ class NewsVideoPipeline:
                 console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
         
         return scenes
+    
+    def generate_scene_videos_remotion(
+        self,
+        scenes: list[Scene],
+        output_prefix: str,
+        headline: str = "",
+        sub_headline: str = "",
+        is_breaking: bool = True,
+        news_style: bool = True,
+        mood: str = "exciting",
+    ) -> list[Scene]:
+        """Remotion でニュース風動画を生成
+        
+        Args:
+            scenes: シーンリスト（image_path があればそれを背景に使用）
+            output_prefix: 出力ファイル名プレフィックス
+            headline: ヘッドライン（最初のシーンのみ表示）
+            sub_headline: サブヘッドライン
+            is_breaking: BREAKING NEWS 表示
+            news_style: ニュース風スタイルを使用
+            mood: ムード（グラデーション背景の場合に使用）
+        """
+        
+        console.print("\n[cyan]🎬 シーン動画を生成中 (Remotion)...[/cyan]")
+        
+        # ムードに基づく色（フォールバック用）
+        mood_colors = {
+            "exciting": ["#FF6B6B", "#FF8E53"],
+            "heartwarming": ["#A8E6CF", "#DCEDC1"],
+            "funny": ["#FFE66D", "#FFB347"],
+            "shocking": ["#E94560", "#1A1A2E"],
+            "informative": ["#4ECDC4", "#44A08D"],
+        }
+        
+        for scene in scenes:
+            output_path = str(self.dirs["videos"] / f"{output_prefix}_scene{scene.index + 1}.mp4")
+            duration = getattr(scene, 'audio_duration', 5.0) or 5.0
+            narration_text = getattr(scene, 'narration_text', scene.subtitle) or scene.description
+            
+            # 背景画像があればニュース風、なければモーショングラフィックス
+            if scene.image_path and news_style:
+                # ニュース風（背景画像 + オーバーレイ）
+                # - チャンネルロゴ: 全シーンで表示
+                # - バナー（BREAKING + タイトル + サブタイトル）: 最初のシーンのみ
+                # - 字幕: 全シーンで表示
+                is_first_scene = scene.index == 0
+                result = self.remotion_gen.generate_news_scene(
+                    scene_number=scene.index + 1,
+                    duration=duration,
+                    output_path=output_path,
+                    background_image=scene.image_path,
+                    subtitle=narration_text[:50] if narration_text else "",
+                    headline=headline if is_first_scene else "",
+                    sub_headline=sub_headline if is_first_scene else "",
+                    channel_name=self.channel_name,
+                    is_breaking=is_breaking and is_first_scene,
+                    show_overlay=is_first_scene,  # バナーは最初のシーンのみ
+                )
+            else:
+                # モーショングラフィックス風（グラデーション背景）
+                base_colors = mood_colors.get(mood, mood_colors["exciting"])
+                scene_config = SceneConfig(
+                    scene_number=scene.index + 1,
+                    duration=duration,
+                    background_colors=base_colors,
+                    elements=[
+                        {
+                            "type": "emoji",
+                            "content": self._get_emoji_for_scene(scene.description),
+                            "style": {"size": "xxl"},
+                            "position": {"x": "center", "y": "center", "offsetY": -100},
+                            "animation": {"enter": "bounce-in", "delay": 0},
+                        },
+                        {
+                            "type": "text",
+                            "content": narration_text[:40] if narration_text else scene.description[:40],
+                            "style": {"size": "lg", "weight": "bold", "color": "#FFFFFF"},
+                            "position": {"x": "center", "y": "center", "offsetY": 120},
+                            "animation": {"enter": "fade-in-up", "delay": 0.5},
+                        },
+                    ],
+                    subtitle=scene.subtitle[:50] if scene.subtitle else "",
+                )
+                result = self.remotion_gen.generate_scene(scene_config, output_path)
+            
+            if result.success:
+                scene.video_path = output_path
+                console.print(f"  ✅ シーン{scene.index + 1}: {output_path} ({result.duration_seconds:.1f}秒)")
+            else:
+                console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
+        
+        return scenes
+    
+    def _get_emoji_for_scene(self, description: str) -> str:
+        """シーン説明から適切な絵文字を選択"""
+        emoji_map = {
+            "猫": "🐱", "犬": "🐶", "動物": "🐾",
+            "家": "🏠", "帰": "🏠",
+            "車": "🚗", "旅": "🧳", "道": "🛣️",
+            "海": "🌊", "山": "⛰️", "空": "☁️",
+            "愛": "❤️", "心": "💕",
+            "驚": "😱", "衝撃": "💥",
+            "笑": "😂", "面白": "🤣",
+            "泣": "😭", "感動": "🥹",
+            "火": "🔥", "熱": "🔥",
+            "走": "🏃", "歩": "🚶",
+            "食": "🍽️", "料理": "👨‍🍳",
+            "勝": "🏆", "優勝": "🥇",
+            "発見": "🔍", "調査": "🔬",
+        }
+        
+        for keyword, emoji in emoji_map.items():
+            if keyword in description:
+                return emoji
+        
+        return "📰"  # デフォルト
     
     def generate_scene_videos(
         self,
@@ -323,7 +451,8 @@ class NewsVideoPipeline:
              valid_scenes[0].video_path],
             capture_output=True, text=True
         )
-        width, height = map(int, probe.stdout.strip().split(','))
+        size_parts = [p for p in probe.stdout.strip().split(',') if p]
+        width, height = int(size_parts[0]), int(size_parts[1])
         
         # 一時ファイル用ディレクトリ
         temp_dir = self.dirs["temp"]
@@ -584,10 +713,12 @@ class NewsVideoPipeline:
         visual_style: str,
         output_prefix: str,
         is_breaking: bool,
+        mood: str = "exciting",
     ) -> NewsVideoResult:
         """シーン同期フロー: 各シーンのナレーションと映像を同期させる"""
         
         console.print(f"\n[cyan]🎬 シーン同期モード ({len(scenes_data)}シーン)[/cyan]")
+        console.print(f"[cyan]💰 モード: {'Remotion (無料)' if self.use_remotion else 'Luma (有料)'}[/cyan]")
         if hook:
             console.print(f"[yellow]🎣 フック: {hook}[/yellow]")
         if visual_style:
@@ -613,33 +744,67 @@ class NewsVideoPipeline:
             scenes.append(scene)
             console.print(f"  シーン{i+1}: {visual_desc[:40]}...")
         
-        # 2. 画像生成
-        scenes = self.generate_scene_images(scenes, output_prefix)
+        # 2. 動画生成（Remotion or Luma）
+        if self.use_remotion:
+            # Remotion: 先にナレーションを生成して、その長さに合わせる
+            console.print("\n[cyan]🎤 シーン別ナレーション生成中（先に音声）...[/cyan]")
+            for scene in scenes:
+                narration_text = getattr(scene, 'narration_text', scene.subtitle)
+                if narration_text:
+                    audio_path = str(self.dirs["audio"] / f"{output_prefix}_scene{scene.index + 1}.mp3")
+                    result = self.narration_gen.generate(text=narration_text, output_path=audio_path)
+                    if result.success:
+                        scene.audio_path = audio_path
+                        scene.audio_duration = result.duration_seconds
+                        console.print(f"  ✅ シーン{scene.index + 1}: {result.duration_seconds:.1f}秒")
+            
+            # 画像生成（ニュース風の背景用）
+            console.print("\n[cyan]🖼️ 背景画像を生成中 (Flux)...[/cyan]")
+            scenes = self.generate_scene_images(scenes, output_prefix)
+            
+            # Remotion で動画生成（背景画像 + ニュースオーバーレイ）
+            scenes = self.generate_scene_videos_remotion(
+                scenes, output_prefix,
+                headline=headline,
+                sub_headline=sub_headline,
+                is_breaking=is_breaking,
+                news_style=True,
+                mood=mood,
+            )
+        else:
+            # Luma: 画像生成 → 動画生成（有料）
+            scenes = self.generate_scene_images(scenes, output_prefix)
+            scenes = self.generate_scene_videos(scenes, output_prefix)
         
-        # 3. 動画生成
-        scenes = self.generate_scene_videos(scenes, output_prefix)
-        
-        # 4. シーンごとにナレーション生成
-        console.print("\n[cyan]🎤 シーン別ナレーション生成中...[/cyan]")
+        # 4. シーンごとにナレーション生成（Remotionの場合は既に生成済み）
         scene_audios = []
         total_audio_duration = 0
         
-        for scene in scenes:
-            narration_text = getattr(scene, 'narration_text', scene.subtitle)
-            if not narration_text:
-                continue
+        if self.use_remotion:
+            # Remotion: 既に生成済みなので集計のみ
+            for scene in scenes:
+                if hasattr(scene, 'audio_path') and scene.audio_path:
+                    scene_audios.append(scene.audio_path)
+                    total_audio_duration += getattr(scene, 'audio_duration', 0)
+        else:
+            # Luma: ここでナレーション生成
+            console.print("\n[cyan]🎤 シーン別ナレーション生成中...[/cyan]")
+            for scene in scenes:
+                narration_text = getattr(scene, 'narration_text', scene.subtitle)
+                if not narration_text:
+                    continue
+                    
+                audio_path = str(self.dirs["audio"] / f"{output_prefix}_scene{scene.index + 1}.mp3")
+                result = self.narration_gen.generate(text=narration_text, output_path=audio_path)
                 
-            audio_path = str(self.dirs["audio"] / f"{output_prefix}_scene{scene.index + 1}.mp3")
-            result = self.narration_gen.generate(text=narration_text, output_path=audio_path)
-            
-            if result.success:
-                scene.audio_path = audio_path
-                scene.audio_duration = result.duration_seconds
-                total_audio_duration += result.duration_seconds
-                scene_audios.append(audio_path)
-                console.print(f"  ✅ シーン{scene.index + 1}: {result.duration_seconds:.1f}秒")
-            else:
-                console.print(f"  ❌ シーン{scene.index + 1}: 音声生成失敗")
+                if result.success:
+                    scene.audio_path = audio_path
+                    scene.audio_duration = result.duration_seconds
+                    total_audio_duration += result.duration_seconds
+                    scene_audios.append(audio_path)
+                    console.print(f"  ✅ シーン{scene.index + 1}: {result.duration_seconds:.1f}秒")
+                else:
+                    console.print(f"  ❌ シーン{scene.index + 1}: 音声生成失敗")
         
         # 5. 締めナレーション
         if closing_text:
@@ -697,6 +862,9 @@ class NewsVideoPipeline:
                 console.print(f"  ℹ️ BGMなし（{mood.value}用BGM未設定）")
         
         # 7. 最終合成（シーンごとに音声長に合わせる）
+        # Remotion + 画像生成の場合はオーバーレイをスキップ（Remotion で既に含まれている）
+        skip_overlay = self.use_remotion and any(s.image_path for s in scenes)
+        
         final_path = self._compose_scene_synced_video(
             scenes=scenes,
             combined_audio=final_audio,  # BGMミックス済み音声
@@ -705,6 +873,7 @@ class NewsVideoPipeline:
             sub_headline=sub_headline,
             output_prefix=output_prefix,
             is_breaking=is_breaking,
+            skip_overlay=skip_overlay,
         )
         
         # 動画の長さを取得
@@ -759,8 +928,13 @@ class NewsVideoPipeline:
         sub_headline: str,
         output_prefix: str,
         is_breaking: bool,
+        skip_overlay: bool = False,
     ) -> str:
-        """シーン同期で最終動画を合成"""
+        """シーン同期で最終動画を合成
+        
+        Args:
+            skip_overlay: True の場合、オーバーレイを追加しない（Remotion ニュース風の場合）
+        """
         
         console.print("\n[cyan]🎬 シーン同期合成中...[/cyan]")
         
@@ -781,7 +955,8 @@ class NewsVideoPipeline:
              valid_scenes[0].video_path],
             capture_output=True, text=True
         )
-        width, height = map(int, probe.stdout.strip().split(','))
+        size_parts = [p for p in probe.stdout.strip().split(',') if p]
+        width, height = int(size_parts[0]), int(size_parts[1])
         
         temp_dir = self.dirs["temp"]
         
@@ -803,33 +978,45 @@ class NewsVideoPipeline:
             # スロー率を計算（最大2倍まで）
             slowdown = min(target_duration / actual_duration, 2.0)
             
-            # オーバーレイ作成
-            overlay_path = str(temp_dir / f"overlay_{i}.png")
-            self.compositor.create_transparent_overlay(
-                output_path=overlay_path,
-                headline=headline if i == 0 else "",
-                sub_headline=sub_headline if i == 0 else "",
-                subtitle=scene.subtitle,
-                is_breaking=is_breaking and i == 0,
-                width=width,
-                height=height,
-            )
-            
-            # 動画調整（スロー + オーバーレイ）
             adjusted_path = str(temp_dir / f"adjusted_{i}.mp4")
             
-            filter_complex = f"[0:v]setpts={slowdown}*PTS[slowed];[slowed][1:v]overlay=0:0"
-            
-            subprocess.run([
-                "ffmpeg", "-y",
-                "-i", scene.video_path,
-                "-i", overlay_path,
-                "-filter_complex", filter_complex,
-                "-t", str(target_duration),
-                "-c:v", "libx264", "-preset", "fast",
-                "-an",
-                adjusted_path
-            ], capture_output=True)
+            if skip_overlay:
+                # オーバーレイなし（Remotion ニュース風の場合は既に含まれている）
+                filter_complex = f"setpts={slowdown}*PTS"
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-i", scene.video_path,
+                    "-vf", filter_complex,
+                    "-t", str(target_duration),
+                    "-c:v", "libx264", "-preset", "fast",
+                    "-an",
+                    adjusted_path
+                ], capture_output=True)
+            else:
+                # オーバーレイ作成（最初のシーンのみヘッドライン表示）
+                overlay_path = str(temp_dir / f"overlay_{i}.png")
+                self.compositor.create_transparent_overlay(
+                    width=width,
+                    height=height,
+                    headline=headline if i == 0 else "",
+                    sub_headline=sub_headline if i == 0 else "",
+                    is_breaking=is_breaking and i == 0,
+                    output_path=overlay_path,
+                    style="gradient",
+                )
+                
+                # 動画調整（スロー + オーバーレイ）
+                filter_complex = f"[0:v]setpts={slowdown}*PTS[slowed];[slowed][1:v]overlay=0:0"
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-i", scene.video_path,
+                    "-i", overlay_path,
+                    "-filter_complex", filter_complex,
+                    "-t", str(target_duration),
+                    "-c:v", "libx264", "-preset", "fast",
+                    "-an",
+                    adjusted_path
+                ], capture_output=True)
             
             adjusted_videos.append(adjusted_path)
             console.print(f"  ✅ シーン{i+1}: {actual_duration:.1f}秒 → {target_duration:.1f}秒 (x{slowdown:.2f})")
@@ -871,30 +1058,19 @@ class NewsVideoPipeline:
         
         if combined_audio:
             # イントロ分の無音(2秒) + メイン音声 + アウトロ分の無音(3秒) を作成
-            intro_duration = 2.0
-            outro_duration = 3.0
-            
-            padded_audio = str(temp_dir / "padded_audio.mp3")
-            subprocess.run([
-                "ffmpeg", "-y",
-                "-f", "lavfi", "-t", str(intro_duration), "-i", "anullsrc=r=44100:cl=stereo",
-                "-i", combined_audio,
-                "-f", "lavfi", "-t", str(outro_duration), "-i", "anullsrc=r=44100:cl=stereo",
-                "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]",
-                "-map", "[out]",
-                "-c:a", "aac", "-b:a", "192k",
-                padded_audio
-            ], capture_output=True)
-            
-            subprocess.run([
+            # 直接音声を追加（イントロ/アウトロは無音になる）
+            result = subprocess.run([
                 "ffmpeg", "-y",
                 "-i", concat_video,
-                "-i", padded_audio,
+                "-i", combined_audio,
                 "-c:v", "copy",
                 "-c:a", "aac", "-b:a", "192k",
                 "-shortest",
                 final_path
-            ], capture_output=True)
+            ], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                console.print(f"[red]⚠️ 音声追加エラー: {result.stderr[:200]}[/red]")
         else:
             subprocess.run(["cp", concat_video, final_path])
         

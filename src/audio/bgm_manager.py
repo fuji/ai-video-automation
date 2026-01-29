@@ -172,13 +172,23 @@ class BGMManager:
                 f"[narr][bgm]amix=inputs=2:duration=first:dropout_transition=2[out]"
             )
             
+            # 出力形式を拡張子から判断
+            output_ext = Path(output_path).suffix.lower()
+            if output_ext == ".mp3":
+                audio_codec = ["libmp3lame", "-b:a", "192k"]
+            elif output_ext == ".aac" or output_ext == ".m4a":
+                audio_codec = ["aac", "-b:a", "192k"]
+            else:
+                audio_codec = ["aac", "-b:a", "192k"]
+            
             cmd = [
                 "ffmpeg", "-y",
                 "-i", narration_path,
                 "-i", bgm_path,
                 "-filter_complex", filter_complex,
                 "-map", "[out]",
-                "-c:a", "aac", "-b:a", "192k",
+                "-ar", "44100",  # サンプルレート統一
+                "-c:a", *audio_codec,
                 output_path
             ]
             
