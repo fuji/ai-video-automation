@@ -57,7 +57,7 @@ class NewsVideoPipeline:
     def __init__(
         self,
         channel_name: str = "FJ News 24",
-        num_scenes: int = 3,
+        num_scenes: int = 4,  # 4シーンで約20秒のベース動画
         scene_duration: float = 5.0,
     ):
         self.channel_name = channel_name
@@ -90,23 +90,29 @@ class NewsVideoPipeline:
     ) -> list[Scene]:
         """記事を分析して複数シーンに分解"""
         
-        prompt = f"""以下のニュース記事を{self.num_scenes}つのシーンに分解してください。
+        prompt = f"""以下のニュース記事を{self.num_scenes}つの映像的なシーンに分解してください。
 
 # 記事
 タイトル: {headline}
 本文: {article_text}
 
+# シーン構成ガイド（{self.num_scenes}シーン）
+1. オープニング: 状況設定、主人公や舞台の紹介
+2. 展開1: 出来事の始まり、問題や状況の発生
+3. 展開2: クライマックス、最も印象的な瞬間
+4. エンディング: 結末、現在の状況、余韻
+
 # 出力形式 (JSON)
 各シーンについて以下を生成:
-- description: シーンの説明（日本語、1文）
-- image_prompt: Flux画像生成用プロンプト（英語、具体的で視覚的な描写、50語以内）
-- video_prompt: Luma動画生成用プロンプト（英語、カメラワークや動きの指示、20語以内）
-- subtitle: このシーンのナレーション字幕（日本語、15-25文字）
-
-# 注意
-- image_promptはフォトリアリスティックなスタイルで
-- 各シーンが物語として繋がるように
-- 最初のシーンは状況説明、中間は展開、最後は結末
+- description: シーンの説明（日本語、1文で映像をイメージできるように）
+- image_prompt: Flux画像生成用プロンプト（英語、70語以内）
+  * 具体的な被写体、場所、時間帯、雰囲気を含める
+  * "photorealistic, cinematic lighting, 4K quality" を含める
+  * 人物がいる場合は表情や動作も描写
+- video_prompt: Luma動画生成用プロンプト（英語、25語以内）
+  * カメラワーク（pan, zoom, dolly等）を指定
+  * 動きの方向と速度を含める
+- subtitle: このシーンの字幕（日本語、20-30文字、感情が伝わるように）
 
 ```json
 {{
