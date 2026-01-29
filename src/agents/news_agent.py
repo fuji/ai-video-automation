@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass
 
-import google.generativeai as genai
+from google import genai
 from rich.console import Console
 
 from src.fetchers.odd_news_fetcher import OddNewsFetcher, NewsArticle
@@ -73,8 +73,7 @@ class NewsVideoAgent:
         self.state = AgentState.load()
         
         # Gemini for AI scoring
-        genai.configure(api_key=config.gemini.api_key)
-        self.gemini = genai.GenerativeModel("gemini-2.0-flash")
+        self.gemini_client = genai.Client(api_key=config.gemini.api_key)
         
         console.print("[green]NewsVideoAgent initialized[/green]")
     
@@ -115,7 +114,10 @@ class NewsVideoAgent:
 ```"""
 
         try:
-            response = self.gemini.generate_content(prompt)
+            response = self.gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+            )
             content = response.text
             
             # JSON抽出
@@ -321,7 +323,10 @@ class NewsVideoAgent:
 ```"""
 
         try:
-            response = self.gemini.generate_content(prompt)
+            response = self.gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+            )
             content = response.text
             json_start = content.find("{")
             json_end = content.rfind("}") + 1

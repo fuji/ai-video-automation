@@ -3,8 +3,7 @@
 from .content_planner import ContentPlanner, VideoProject, Scene, create_sample_project
 from .image_generator import ImageGenerator, FluxImageGenerator
 from .video_generator import VideoGenerator
-from .narration_generator import NarrationGenerator, NarrationResult, NarrationConfig, QuotaTracker
-from .edge_tts_generator import EdgeTTSGenerator, EdgeTTSConfig
+from .edge_tts_generator import EdgeTTSGenerator, EdgeTTSConfig, NarrationResult
 from .news_explainer import NewsExplainer, NewsExplanation
 from .news_rewriter import NewsRewriter, RewriteResult
 from .news_content_planner import NewsContentPlanner, NewsVideoProject, NewsScene
@@ -18,12 +17,9 @@ __all__ = [
     "ImageGenerator",
     "FluxImageGenerator",
     "VideoGenerator",
-    "NarrationGenerator",
-    "NarrationResult",
-    "NarrationConfig",
-    "QuotaTracker",
     "EdgeTTSGenerator",
     "EdgeTTSConfig",
+    "NarrationResult",
     "NewsExplainer",
     "NewsExplanation",
     "NewsRewriter",

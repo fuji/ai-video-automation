@@ -28,7 +28,7 @@ from ..utils.trend_detector import TrendDetector, TrendingNews
 from ..utils.news_scraper import NewsScraper
 from ..utils.rss_fetcher import RSSFetcher, RSSArticle
 from ..generators.news_explainer import NewsExplainer, NewsExplanation
-from ..generators.narration_generator import NarrationGenerator, NarrationConfig
+from ..generators.edge_tts_generator import EdgeTTSGenerator, EdgeTTSConfig
 from ..generators.image_generator import ImageGenerator
 from ..generators.veo_video_generator import VeoVideoGenerator
 from ..generators.news_content_planner import NewsContentPlanner
@@ -59,7 +59,7 @@ class NewsAutomationPipeline:
         self.news_scraper: Optional[NewsScraper] = None
         self.rss_fetcher: Optional[RSSFetcher] = None
         self.news_explainer: Optional[NewsExplainer] = None
-        self.narration_generator: Optional[NarrationGenerator] = None
+        self.narration_generator: Optional[EdgeTTSGenerator] = None
         self.image_generator: Optional[ImageGenerator] = None
         self.veo_generator: Optional[VeoVideoGenerator] = None
         self.content_planner: Optional[NewsContentPlanner] = None
@@ -102,10 +102,10 @@ class NewsAutomationPipeline:
 
         # ナレーション生成
         try:
-            self.narration_generator = NarrationGenerator()
-            print_success("NarrationGenerator initialized")
+            self.narration_generator = EdgeTTSGenerator()
+            print_success("EdgeTTSGenerator initialized")
         except Exception as e:
-            logger.warning(f"NarrationGenerator init failed: {e}")
+            logger.warning(f"EdgeTTSGenerator init failed: {e}")
 
         # 画像生成
         try:
@@ -207,8 +207,8 @@ class NewsAutomationPipeline:
                 # 3. ナレーション生成
                 progress.update(task, description="ナレーション生成中...")
                 narration_script = explanation.get_narration_script()
-                # NarrationConfig.news_style() から voice を除外して渡す
-                style_config = NarrationConfig.news_style()
+                # EdgeTTSConfig.news_style() から voice を除外して渡す
+                style_config = EdgeTTSConfig.news_style()
                 style_config.pop("voice", None)  # voice は引数で指定するので除外
                 narration_result = self.narration_generator.generate(
                     text=narration_script,

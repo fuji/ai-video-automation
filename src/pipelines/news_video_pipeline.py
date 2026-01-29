@@ -14,7 +14,7 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
 from rich.console import Console
-import google.generativeai as genai
+from google import genai
 
 import fal_client
 import httpx
@@ -75,8 +75,7 @@ class NewsVideoPipeline:
         self.compositor = NewsGraphicsCompositor(channel_name=channel_name)
         
         # Gemini for scene analysis
-        genai.configure(api_key=config.gemini.api_key)
-        self.gemini = genai.GenerativeModel("gemini-2.0-flash")
+        self.gemini_client = genai.Client(api_key=config.gemini.api_key)
         
         # FAL API key for Luma
         os.environ["FAL_KEY"] = config.fal.api_key
@@ -125,7 +124,10 @@ class NewsVideoPipeline:
 
         console.print("\n[cyan]📝 記事を分析中...[/cyan]")
         
-        response = self.gemini.generate_content(prompt)
+        response = self.gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
         
         # JSONを抽出
         content = response.text
