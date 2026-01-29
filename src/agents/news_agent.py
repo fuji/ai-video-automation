@@ -244,6 +244,8 @@ class NewsVideoAgent:
         
         console.print(f"📝 リライト完了:")
         console.print(f"  見出し: {translated.get('headline', 'N/A')}")
+        console.print(f"  フック: {translated.get('hook', 'N/A')}")
+        console.print(f"  スタイル: {translated.get('visual_style', 'N/A')}")
         console.print(f"  シーン数: {len(translated.get('scenes', []))}")
         
         # パイプライン初期化（遅延）
@@ -260,6 +262,9 @@ class NewsVideoAgent:
             sub_headline=translated.get("sub_headline", ""),
             scenes_data=translated.get("scenes", []),
             closing_text=translated.get("closing", ""),
+            hook=translated.get("hook", ""),
+            keywords=translated.get("keywords", []),
+            visual_style=translated.get("visual_style", ""),
             is_breaking=True,
         )
         
@@ -292,7 +297,8 @@ class NewsVideoAgent:
         
         console.print(f"📝 リライト完了:")
         console.print(f"  見出し: {translated.get('headline', 'N/A')}")
-        console.print(f"  サブ: {translated.get('sub_headline', 'N/A')}")
+        console.print(f"  フック: {translated.get('hook', 'N/A')}")
+        console.print(f"  スタイル: {translated.get('visual_style', 'N/A')}")
         console.print(f"  シーン数: {len(translated.get('scenes', []))}")
         
         if self.pipeline is None:
@@ -303,6 +309,9 @@ class NewsVideoAgent:
             sub_headline=translated.get("sub_headline", ""),
             scenes_data=translated.get("scenes", []),
             closing_text=translated.get("closing", ""),
+            hook=translated.get("hook", ""),
+            keywords=translated.get("keywords", []),
+            visual_style=translated.get("visual_style", ""),
         )
         
         if result.success:
@@ -325,10 +334,15 @@ class NewsVideoAgent:
 - **各シーンのナレーションは映像と同期するので、シーンの内容に合った文章にする**
 
 # シーン構成ガイド（{num_scenes}シーン、各10-15秒）
-1. **オープニング**: 視聴者の興味を引くフック。「えっ!?」となる導入
+1. **オープニング**: 視聴者を引き込むフック！「えっ!?」「マジで!?」となる衝撃の一言から始める
 2. **展開1**: 状況説明、何が起きたのかを伝える
 3. **展開2**: クライマックス、最も印象的・感動的な部分
-4. **エンディング**: 結末と余韻、視聴者への問いかけ
+4. **エンディング**: 結末と余韻、視聴者への問いかけや感想
+
+# フックの例
+- 「250キロを歩いて帰ってきた猫がいるって、信じられますか？」
+- 「89歳のおじいちゃんが、まさかのTikTokデビュー！」
+- 「世界一〇〇な△△が誕生しました！」
 
 # 元記事
 タイトル: {title}
@@ -339,33 +353,40 @@ class NewsVideoAgent:
 {{
   "headline": "キャッチーなタイトル（15文字以内）",
   "sub_headline": "補足タイトル（20文字以内）",
+  "hook": "冒頭3秒で視聴者を引き込むフレーズ（25文字以内）。疑問形や驚きの表現で",
+  "keywords": ["強調したいキーワード1", "キーワード2", "キーワード3"],
+  "visual_style": "映像全体の雰囲気（例: 温かみのある家族写真風 / ドキュメンタリー風 / コミカルなイラスト風）",
   "scenes": [
     {{
       "scene_number": 1,
       "title": "シーンの短いタイトル（5文字以内）",
-      "narration": "このシーンのナレーション（50-80文字）。映像に合わせた内容で。",
-      "visual_description": "このシーンの映像イメージ（日本語で簡潔に）"
+      "narration": "このシーンのナレーション（50-80文字）。フックを含めて始める。",
+      "visual_description": "このシーンの映像イメージ（日本語で簡潔に）",
+      "emphasis_word": "このシーンで強調する単語（あれば）"
     }},
     {{
       "scene_number": 2,
       "title": "...",
       "narration": "...",
-      "visual_description": "..."
+      "visual_description": "...",
+      "emphasis_word": "..."
     }},
     {{
       "scene_number": 3,
       "title": "...",
       "narration": "...",
-      "visual_description": "..."
+      "visual_description": "...",
+      "emphasis_word": "..."
     }},
     {{
       "scene_number": 4,
       "title": "...",
       "narration": "...",
-      "visual_description": "..."
+      "visual_description": "...",
+      "emphasis_word": "..."
     }}
   ],
-  "closing": "締めの一言（20-30文字）。感想やツッコミ"
+  "closing": "締めの一言（20-30文字）。感想やツッコミ、視聴者への問いかけ"
 }}
 ```"""
 

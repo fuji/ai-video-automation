@@ -471,6 +471,9 @@ class NewsVideoPipeline:
         sub_headline: str = "",
         scenes_data: list[dict] = None,
         closing_text: str = "",
+        hook: str = "",  # フック（冒頭の引き）
+        keywords: list[str] = None,  # 強調キーワード
+        visual_style: str = "",  # 映像スタイル
         article_text: str = "",  # 後方互換用
         output_prefix: Optional[str] = None,
         is_breaking: bool = True,
@@ -482,6 +485,9 @@ class NewsVideoPipeline:
             sub_headline: サブヘッドライン
             scenes_data: シーン構成データ（新形式）
             closing_text: 締めナレーション（省略可）
+            hook: 冒頭のフック（視聴者を引き込むフレーズ）
+            keywords: 強調したいキーワードリスト
+            visual_style: 映像全体のスタイル（例: 温かみのある家族写真風）
             article_text: 記事本文（後方互換用、scenes_dataがない場合に使用）
             output_prefix: 出力ファイル名プレフィックス
             is_breaking: BREAKING NEWSバナー表示
@@ -503,6 +509,9 @@ class NewsVideoPipeline:
                     sub_headline=sub_headline,
                     scenes_data=scenes_data,
                     closing_text=closing_text,
+                    hook=hook,
+                    keywords=keywords or [],
+                    visual_style=visual_style,
                     output_prefix=output_prefix,
                     is_breaking=is_breaking,
                 )
@@ -570,19 +579,26 @@ class NewsVideoPipeline:
         sub_headline: str,
         scenes_data: list[dict],
         closing_text: str,
+        hook: str,
+        keywords: list[str],
+        visual_style: str,
         output_prefix: str,
         is_breaking: bool,
     ) -> NewsVideoResult:
         """シーン同期フロー: 各シーンのナレーションと映像を同期させる"""
         
         console.print(f"\n[cyan]🎬 シーン同期モード ({len(scenes_data)}シーン)[/cyan]")
+        if hook:
+            console.print(f"[yellow]🎣 フック: {hook}[/yellow]")
+        if visual_style:
+            console.print(f"[magenta]🎨 スタイル: {visual_style}[/magenta]")
         
         # 1. scenes_dataからSceneオブジェクトを作成
         scenes = []
         for i, sd in enumerate(scenes_data):
-            # visual_descriptionから画像プロンプトを生成
+            # visual_descriptionから画像プロンプトを生成（visual_styleを統一適用）
             visual_desc = sd.get("visual_description", sd.get("title", ""))
-            image_prompt = self._create_image_prompt(visual_desc, headline)
+            image_prompt = self._create_image_prompt(visual_desc, headline, visual_style)
             
             scene = Scene(
                 index=i,
@@ -591,8 +607,9 @@ class NewsVideoPipeline:
                 video_prompt=f"Slow cinematic camera movement, {visual_desc}",
                 subtitle=sd.get("narration", "")[:30],  # 字幕は短く
             )
-            # ナレーションテキストを保持
+            # ナレーションテキストと強調ワードを保持
             scene.narration_text = sd.get("narration", "")
+            scene.emphasis_word = sd.get("emphasis_word", "")
             scenes.append(scene)
             console.print(f"  シーン{i+1}: {visual_desc[:40]}...")
         
@@ -706,9 +723,32 @@ class NewsVideoPipeline:
             duration_seconds=duration,
         )
     
-    def _create_image_prompt(self, visual_desc: str, headline: str) -> str:
-        """visual_descriptionから画像プロンプトを生成"""
-        return f"Photorealistic, cinematic lighting, 4K quality, {visual_desc}, related to: {headline}"
+    def _create_image_prompt(self, visual_desc: str, headline: str, visual_style: str = "") -> str:
+        """visual_descriptionから画像プロンプトを生成（スタイル統一）"""
+        base = "Photorealistic, cinematic lighting, 4K quality, high detail"
+        
+        # visual_styleがあれば追加
+        if visual_style:
+            style_map = {
+                "温かみ": "warm color palette, soft lighting, heartwarming atmosphere",
+                "家族": "family-friendly, warm tones, emotional",
+                "ドキュメンタリー": "documentary style, natural lighting, realistic",
+                "コミカル": "playful, bright colors, whimsical",
+                "感動": "emotional, touching, cinematic, dramatic lighting",
+                "驚き": "dramatic, impactful, vivid colors",
+            }
+            # スタイルキーワードをマッチング
+            style_addition = ""
+            for key, value in style_map.items():
+                if key in visual_style:
+                    style_addition = value
+                    break
+            if not style_addition:
+                style_addition = visual_style  # そのまま使用
+            
+            return f"{base}, {style_addition}, {visual_desc}"
+        
+        return f"{base}, {visual_desc}"
     
     def _compose_scene_synced_video(
         self,
@@ -830,9 +870,9 @@ class NewsVideoPipeline:
         final_path = str(self.dirs["final"] / f"{output_prefix}_final.mp4")
         
         if combined_audio:
-            # イントロ分の無音(3秒) + メイン音声 + アウトロ分の無音(4秒) を作成
-            intro_duration = 3.0
-            outro_duration = 4.0
+            # イントロ分の無音(2秒) + メイン音声 + アウトロ分の無音(3秒) を作成
+            intro_duration = 2.0
+            outro_duration = 3.0
             
             padded_audio = str(temp_dir / "padded_audio.mp3")
             subprocess.run([
