@@ -24,6 +24,7 @@ from src.generators.image_generator import FluxImageGenerator
 from src.config import config, get_daily_output_dirs
 from src.generators.edge_tts_generator import EdgeTTSGenerator  # 無料TTS
 from src.editors.news_graphics import NewsGraphicsCompositor
+from src.audio.bgm_manager import BGMManager, MoodType
 
 console = Console()
 
@@ -71,6 +72,7 @@ class NewsVideoPipeline:
         self.image_gen = FluxImageGenerator()
         self.narration_gen = EdgeTTSGenerator()  # 無料TTS (Edge TTS)
         self.compositor = NewsGraphicsCompositor(channel_name=channel_name)
+        self.bgm_manager = BGMManager()  # BGM管理
         
         # Gemini for scene analysis
         self.gemini_client = genai.Client(api_key=config.gemini.api_key)
@@ -646,10 +648,36 @@ class NewsVideoPipeline:
         
         console.print(f"  ✅ 合計音声: {total_audio_duration:.1f}秒")
         
+        # 6.5. BGMミックス
+        final_audio = combined_audio
+        if combined_audio:
+            # ナレーションテキストからムードを検出
+            all_narration = " ".join([getattr(s, 'narration_text', '') for s in scenes])
+            mood = self.bgm_manager.detect_mood(headline, all_narration)
+            bgm_track = self.bgm_manager.get_bgm(mood)
+            
+            if bgm_track and bgm_track.exists():
+                console.print(f"\n[cyan]🎵 BGMミックス中... ({mood.value})[/cyan]")
+                mixed_audio = str(self.dirs["audio"] / f"{output_prefix}_mixed.mp3")
+                
+                if self.bgm_manager.mix_audio(
+                    narration_path=combined_audio,
+                    bgm_path=bgm_track.path,
+                    output_path=mixed_audio,
+                    narration_volume=1.0,
+                    bgm_volume=0.12,  # BGMは控えめ
+                ):
+                    final_audio = mixed_audio
+                    console.print(f"  ✅ BGM追加: {bgm_track.name}")
+                else:
+                    console.print(f"  ⚠️ BGMミックス失敗、ナレーションのみ使用")
+            else:
+                console.print(f"  ℹ️ BGMなし（{mood.value}用BGM未設定）")
+        
         # 7. 最終合成（シーンごとに音声長に合わせる）
         final_path = self._compose_scene_synced_video(
             scenes=scenes,
-            combined_audio=combined_audio,
+            combined_audio=final_audio,  # BGMミックス済み音声
             total_audio_duration=total_audio_duration,
             headline=headline,
             sub_headline=sub_headline,
