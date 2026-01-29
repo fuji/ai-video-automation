@@ -460,20 +460,22 @@ class NewsVideoPipeline:
     
     def run(
         self,
-        article_text: str,
         headline: str,
         sub_headline: str = "",
+        scenes_data: list[dict] = None,
         closing_text: str = "",
+        article_text: str = "",  # 後方互換用
         output_prefix: Optional[str] = None,
         is_breaking: bool = True,
     ) -> NewsVideoResult:
         """パイプライン全体を実行
         
         Args:
-            article_text: 記事本文
             headline: ヘッドライン
             sub_headline: サブヘッドライン
+            scenes_data: シーン構成データ（新形式）
             closing_text: 締めナレーション（省略可）
+            article_text: 記事本文（後方互換用、scenes_dataがない場合に使用）
             output_prefix: 出力ファイル名プレフィックス
             is_breaking: BREAKING NEWSバナー表示
         """
@@ -487,6 +489,24 @@ class NewsVideoPipeline:
         console.print("=" * 50)
         
         try:
+            # シーン構成データがある場合は新フロー
+            if scenes_data and len(scenes_data) > 0:
+                return self._run_with_scene_sync(
+                    headline=headline,
+                    sub_headline=sub_headline,
+                    scenes_data=scenes_data,
+                    closing_text=closing_text,
+                    output_prefix=output_prefix,
+                    is_breaking=is_breaking,
+                )
+            
+            # 後方互換: 従来のフロー（article_textから分析）
+            if not article_text:
+                return NewsVideoResult(
+                    success=False,
+                    error_message="scenes_data または article_text が必要です",
+                )
+            
             # 1. 記事分析
             scenes = self.analyze_article(article_text, headline)
             
@@ -536,6 +556,242 @@ class NewsVideoPipeline:
                 success=False,
                 error_message=str(e),
             )
+    
+    def _run_with_scene_sync(
+        self,
+        headline: str,
+        sub_headline: str,
+        scenes_data: list[dict],
+        closing_text: str,
+        output_prefix: str,
+        is_breaking: bool,
+    ) -> NewsVideoResult:
+        """シーン同期フロー: 各シーンのナレーションと映像を同期させる"""
+        
+        console.print(f"\n[cyan]🎬 シーン同期モード ({len(scenes_data)}シーン)[/cyan]")
+        
+        # 1. scenes_dataからSceneオブジェクトを作成
+        scenes = []
+        for i, sd in enumerate(scenes_data):
+            # visual_descriptionから画像プロンプトを生成
+            visual_desc = sd.get("visual_description", sd.get("title", ""))
+            image_prompt = self._create_image_prompt(visual_desc, headline)
+            
+            scene = Scene(
+                index=i,
+                description=visual_desc,
+                image_prompt=image_prompt,
+                video_prompt=f"Slow cinematic camera movement, {visual_desc}",
+                subtitle=sd.get("narration", "")[:30],  # 字幕は短く
+            )
+            # ナレーションテキストを保持
+            scene.narration_text = sd.get("narration", "")
+            scenes.append(scene)
+            console.print(f"  シーン{i+1}: {visual_desc[:40]}...")
+        
+        # 2. 画像生成
+        scenes = self.generate_scene_images(scenes, output_prefix)
+        
+        # 3. 動画生成
+        scenes = self.generate_scene_videos(scenes, output_prefix)
+        
+        # 4. シーンごとにナレーション生成
+        console.print("\n[cyan]🎤 シーン別ナレーション生成中...[/cyan]")
+        scene_audios = []
+        total_audio_duration = 0
+        
+        for scene in scenes:
+            narration_text = getattr(scene, 'narration_text', scene.subtitle)
+            if not narration_text:
+                continue
+                
+            audio_path = str(self.dirs["audio"] / f"{output_prefix}_scene{scene.index + 1}.mp3")
+            result = self.narration_gen.generate(text=narration_text, output_path=audio_path)
+            
+            if result.success:
+                scene.audio_path = audio_path
+                scene.audio_duration = result.duration_seconds
+                total_audio_duration += result.duration_seconds
+                scene_audios.append(audio_path)
+                console.print(f"  ✅ シーン{scene.index + 1}: {result.duration_seconds:.1f}秒")
+            else:
+                console.print(f"  ❌ シーン{scene.index + 1}: 音声生成失敗")
+        
+        # 5. 締めナレーション
+        if closing_text:
+            closing_path = str(self.dirs["audio"] / f"{output_prefix}_closing.mp3")
+            closing_result = self.narration_gen.generate(text=closing_text, output_path=closing_path)
+            if closing_result.success:
+                scene_audios.append(closing_path)
+                total_audio_duration += closing_result.duration_seconds
+                console.print(f"  ✅ 締め: {closing_result.duration_seconds:.1f}秒")
+        
+        # 6. 全音声を結合
+        console.print("\n[cyan]🔊 音声結合中...[/cyan]")
+        combined_audio = str(self.dirs["audio"] / f"{output_prefix}_combined.mp3")
+        
+        if len(scene_audios) > 1:
+            # ffmpegで結合
+            concat_list = str(self.dirs["temp"] / "audio_concat.txt")
+            with open(concat_list, "w") as f:
+                for ap in scene_audios:
+                    f.write(f"file '{ap}'\n")
+            
+            subprocess.run([
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", concat_list, "-c", "copy", combined_audio
+            ], capture_output=True)
+        else:
+            combined_audio = scene_audios[0] if scene_audios else None
+        
+        console.print(f"  ✅ 合計音声: {total_audio_duration:.1f}秒")
+        
+        # 7. 最終合成（シーンごとに音声長に合わせる）
+        final_path = self._compose_scene_synced_video(
+            scenes=scenes,
+            combined_audio=combined_audio,
+            total_audio_duration=total_audio_duration,
+            headline=headline,
+            sub_headline=sub_headline,
+            output_prefix=output_prefix,
+            is_breaking=is_breaking,
+        )
+        
+        # 動画の長さを取得
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", final_path],
+            capture_output=True, text=True
+        )
+        duration = float(probe.stdout.strip()) if probe.stdout.strip() else total_audio_duration
+        
+        return NewsVideoResult(
+            success=True,
+            video_path=final_path,
+            scenes=scenes,
+            audio_path=combined_audio,
+            duration_seconds=duration,
+        )
+    
+    def _create_image_prompt(self, visual_desc: str, headline: str) -> str:
+        """visual_descriptionから画像プロンプトを生成"""
+        return f"Photorealistic, cinematic lighting, 4K quality, {visual_desc}, related to: {headline}"
+    
+    def _compose_scene_synced_video(
+        self,
+        scenes: list[Scene],
+        combined_audio: str,
+        total_audio_duration: float,
+        headline: str,
+        sub_headline: str,
+        output_prefix: str,
+        is_breaking: bool,
+    ) -> str:
+        """シーン同期で最終動画を合成"""
+        
+        console.print("\n[cyan]🎬 シーン同期合成中...[/cyan]")
+        
+        valid_scenes = [s for s in scenes if s.video_path]
+        if not valid_scenes:
+            raise ValueError("有効なシーン動画がありません")
+        
+        # 各シーンの目標時間を計算
+        num_scenes = len(valid_scenes)
+        base_duration_per_scene = total_audio_duration / num_scenes
+        
+        console.print(f"  シーン数: {num_scenes}, 各シーン目標: {base_duration_per_scene:.1f}秒")
+        
+        # 動画サイズを取得
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0",
+             valid_scenes[0].video_path],
+            capture_output=True, text=True
+        )
+        width, height = map(int, probe.stdout.strip().split(','))
+        
+        temp_dir = self.dirs["temp"]
+        
+        # 各シーンを目標時間に調整してオーバーレイ追加
+        adjusted_videos = []
+        
+        for i, scene in enumerate(valid_scenes):
+            # シーン別の音声があれば、その長さに合わせる
+            target_duration = getattr(scene, 'audio_duration', base_duration_per_scene)
+            
+            # 動画の実際の長さを取得
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", scene.video_path],
+                capture_output=True, text=True
+            )
+            actual_duration = float(probe.stdout.strip())
+            
+            # スロー率を計算（最大2倍まで）
+            slowdown = min(target_duration / actual_duration, 2.0)
+            
+            # オーバーレイ作成
+            overlay_path = str(temp_dir / f"overlay_{i}.png")
+            self.compositor.create_transparent_overlay(
+                output_path=overlay_path,
+                headline=headline if i == 0 else "",
+                sub_headline=sub_headline if i == 0 else "",
+                subtitle=scene.subtitle,
+                is_breaking=is_breaking and i == 0,
+                width=width,
+                height=height,
+            )
+            
+            # 動画調整（スロー + オーバーレイ）
+            adjusted_path = str(temp_dir / f"adjusted_{i}.mp4")
+            
+            filter_complex = f"[0:v]setpts={slowdown}*PTS[slowed];[slowed][1:v]overlay=0:0"
+            
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", scene.video_path,
+                "-i", overlay_path,
+                "-filter_complex", filter_complex,
+                "-t", str(target_duration),
+                "-c:v", "libx264", "-preset", "fast",
+                "-an",
+                adjusted_path
+            ], capture_output=True)
+            
+            adjusted_videos.append(adjusted_path)
+            console.print(f"  ✅ シーン{i+1}: {actual_duration:.1f}秒 → {target_duration:.1f}秒 (x{slowdown:.2f})")
+        
+        # 動画を結合
+        concat_list = str(temp_dir / "video_concat.txt")
+        with open(concat_list, "w") as f:
+            for vp in adjusted_videos:
+                f.write(f"file '{vp}'\n")
+        
+        concat_video = str(temp_dir / f"{output_prefix}_concat.mp4")
+        subprocess.run([
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "-i", concat_list, "-c", "copy", concat_video
+        ], capture_output=True)
+        
+        # 音声を追加
+        final_path = str(self.dirs["final"] / f"{output_prefix}_final.mp4")
+        
+        if combined_audio:
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", concat_video,
+                "-i", combined_audio,
+                "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                final_path
+            ], capture_output=True)
+        else:
+            subprocess.run(["cp", concat_video, final_path])
+        
+        console.print(f"\n[green]🎉 完成: {final_path}[/green]")
+        
+        return final_path
 
 
 # CLI用

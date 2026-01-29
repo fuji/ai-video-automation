@@ -239,22 +239,26 @@ class NewsVideoAgent:
         if not full_text:
             full_text = article.get("summary", title)
         
-        # 日本語に翻訳
-        translated = self._translate_to_japanese(title, full_text)
+        # 日本語にリライト（4シーン構成）
+        translated = self._translate_to_japanese(title, full_text, num_scenes=4)
+        
+        console.print(f"📝 リライト完了:")
+        console.print(f"  見出し: {translated.get('headline', 'N/A')}")
+        console.print(f"  シーン数: {len(translated.get('scenes', []))}")
         
         # パイプライン初期化（遅延）
         if self.pipeline is None:
             self.pipeline = NewsVideoPipeline(
                 channel_name="FJ News 24",
-                num_scenes=3,
+                num_scenes=4,
                 scene_duration=5.0,
             )
         
-        # 動画生成
+        # 動画生成（シーン構成データを渡す）
         result = self.pipeline.run(
-            article_text=translated["article"],
             headline=translated["headline"],
             sub_headline=translated.get("sub_headline", ""),
+            scenes_data=translated.get("scenes", []),
             closing_text=translated.get("closing", ""),
             is_breaking=True,
         )
@@ -286,13 +290,18 @@ class NewsVideoAgent:
         
         translated = self._translate_to_japanese(title, full_text)
         
+        console.print(f"📝 リライト完了:")
+        console.print(f"  見出し: {translated.get('headline', 'N/A')}")
+        console.print(f"  サブ: {translated.get('sub_headline', 'N/A')}")
+        console.print(f"  シーン数: {len(translated.get('scenes', []))}")
+        
         if self.pipeline is None:
             self.pipeline = NewsVideoPipeline()
         
         result = self.pipeline.run(
-            article_text=translated["article"],
             headline=translated["headline"],
             sub_headline=translated.get("sub_headline", ""),
+            scenes_data=translated.get("scenes", []),
             closing_text=translated.get("closing", ""),
         )
         
@@ -303,28 +312,60 @@ class NewsVideoAgent:
         else:
             return f"❌ 生成失敗: {result.error_message}"
     
-    def _translate_to_japanese(self, title: str, article: str) -> dict:
-        """記事を日本語にリライト（ユーモア＆オリジナリティ）"""
+    def _translate_to_japanese(self, title: str, article: str, num_scenes: int = 4) -> dict:
+        """記事を日本語にリライト（4シーン構成・ユーモア＆オリジナリティ）"""
         
-        prompt = f"""以下の英語ニュースを、日本語の面白いニュース動画用にリライトしてください。
+        prompt = f"""以下の英語ニュースを、日本語の面白いニュース動画用に{num_scenes}シーン構成でリライトしてください。
 
 # 重要ルール
 - 元記事をそのまま翻訳するのではなく、あなたの言葉でリライトする
 - 軽いユーモアやツッコミを入れて、視聴者が楽しめる内容にする
 - 事実は正確に伝えつつ、表現を工夫する
 - 「〜だそうです」「〜とのこと」など堅い表現は避け、親しみやすく
+- **各シーンのナレーションは映像と同期するので、シーンの内容に合った文章にする**
+
+# シーン構成ガイド（{num_scenes}シーン、各10-15秒）
+1. **オープニング**: 視聴者の興味を引くフック。「えっ!?」となる導入
+2. **展開1**: 状況説明、何が起きたのかを伝える
+3. **展開2**: クライマックス、最も印象的・感動的な部分
+4. **エンディング**: 結末と余韻、視聴者への問いかけ
 
 # 元記事
 タイトル: {title}
-本文: {article[:2000]}
+本文: {article[:2500]}
 
 # 出力（JSON）
 ```json
 {{
-  "headline": "キャッチーなタイトル（15文字以内、興味を引く表現で）",
+  "headline": "キャッチーなタイトル（15文字以内）",
   "sub_headline": "補足タイトル（20文字以内）",
-  "article": "リライトした本文（200-350文字）。ユーモアを交えつつ、ストーリーを伝える。",
-  "closing": "締めの一言（30-50文字）。感想やツッコミ、視聴者への問いかけなど"
+  "scenes": [
+    {{
+      "scene_number": 1,
+      "title": "シーンの短いタイトル（5文字以内）",
+      "narration": "このシーンのナレーション（50-80文字）。映像に合わせた内容で。",
+      "visual_description": "このシーンの映像イメージ（日本語で簡潔に）"
+    }},
+    {{
+      "scene_number": 2,
+      "title": "...",
+      "narration": "...",
+      "visual_description": "..."
+    }},
+    {{
+      "scene_number": 3,
+      "title": "...",
+      "narration": "...",
+      "visual_description": "..."
+    }},
+    {{
+      "scene_number": 4,
+      "title": "...",
+      "narration": "...",
+      "visual_description": "..."
+    }}
+  ],
+  "closing": "締めの一言（20-30文字）。感想やツッコミ"
 }}
 ```"""
 
