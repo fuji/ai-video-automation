@@ -22,7 +22,7 @@ import time
 
 from src.generators.image_generator import FluxImageGenerator
 from src.config import config
-from src.generators.narration_generator import NarrationGenerator
+from src.generators.edge_tts_generator import EdgeTTSGenerator  # 無料TTS
 from src.editors.news_graphics import NewsGraphicsCompositor
 from src.config import IMAGES_DIR, VIDEOS_DIR, OUTPUT_DIR
 
@@ -71,7 +71,7 @@ class NewsVideoPipeline:
         
         # ジェネレーター初期化
         self.image_gen = FluxImageGenerator()
-        self.narration_gen = NarrationGenerator()
+        self.narration_gen = EdgeTTSGenerator()  # 無料TTS (Edge TTS)
         self.compositor = NewsGraphicsCompositor(channel_name=channel_name)
         
         # Gemini for scene analysis
