@@ -225,11 +225,16 @@ class NewsVideoPipeline:
     
     def generate_narration(
         self,
-        scenes: list[Scene],
+        article_text: str,
         output_prefix: str,
         closing_text: str = "",
     ) -> tuple[str, float]:
-        """シーンの字幕からナレーション音声を生成（締めナレーション含む）
+        """記事全文からナレーション音声を生成（締めナレーション含む）
+        
+        Args:
+            article_text: ナレーション用の記事テキスト
+            output_prefix: 出力ファイル名プレフィックス
+            closing_text: 締めナレーション（省略可）
         
         Returns:
             tuple: (audio_path, total_duration)
@@ -237,8 +242,8 @@ class NewsVideoPipeline:
         
         console.print("\n[cyan]🎤 ナレーション生成中...[/cyan]")
         
-        # 全シーンの字幕を結合
-        full_text = "。".join([scene.subtitle for scene in scenes]) + "。"
+        # 記事全文をナレーションに使用
+        full_text = article_text
         
         main_path = str(self.dirs["audio"] / f"{output_prefix}_narration.mp3")
         result = self.narration_gen.generate(text=full_text, output_path=main_path)
@@ -485,9 +490,9 @@ class NewsVideoPipeline:
             # 3. 動画生成
             scenes = self.generate_scene_videos(scenes, output_prefix)
             
-            # 4. ナレーション生成（締め含む）
+            # 4. ナレーション生成（記事全文を使用）
             audio_path, audio_duration = self.generate_narration(
-                scenes, output_prefix, closing_text=closing_text
+                article_text, output_prefix, closing_text=closing_text
             )
             
             # 5. 最終合成（音声長に合わせてスロー調整）
