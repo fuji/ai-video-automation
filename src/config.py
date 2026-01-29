@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,14 +12,54 @@ load_dotenv()
 # パス設定
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
+LOGS_DIR = BASE_DIR / "logs"
+
+# レガシー互換（直接参照している箇所用）
 IMAGES_DIR = OUTPUT_DIR / "images"
 VIDEOS_DIR = OUTPUT_DIR / "videos"
 FINAL_DIR = OUTPUT_DIR / "final"
-LOGS_DIR = BASE_DIR / "logs"
 
 # ディレクトリ作成
-for d in [OUTPUT_DIR, IMAGES_DIR, VIDEOS_DIR, FINAL_DIR, LOGS_DIR]:
+for d in [OUTPUT_DIR, LOGS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+
+
+def get_daily_output_dirs(date: datetime = None) -> dict:
+    """日付ベースの出力ディレクトリを取得・作成
+    
+    Args:
+        date: 日付（Noneの場合は今日）
+    
+    Returns:
+        dict: {
+            "root": Path,      # output/2026-01-29/
+            "images": Path,    # output/2026-01-29/images/
+            "videos": Path,    # output/2026-01-29/videos/
+            "audio": Path,     # output/2026-01-29/audio/
+            "final": Path,     # output/2026-01-29/final/
+            "temp": Path,      # output/2026-01-29/temp/
+        }
+    """
+    if date is None:
+        date = datetime.now()
+    
+    date_str = date.strftime("%Y-%m-%d")
+    root = OUTPUT_DIR / date_str
+    
+    dirs = {
+        "root": root,
+        "images": root / "images",
+        "videos": root / "videos",
+        "audio": root / "audio",
+        "final": root / "final",
+        "temp": root / "temp",
+    }
+    
+    # ディレクトリ作成
+    for d in dirs.values():
+        d.mkdir(parents=True, exist_ok=True)
+    
+    return dirs
 
 
 @dataclass

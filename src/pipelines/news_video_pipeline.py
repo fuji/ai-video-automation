@@ -21,14 +21,9 @@ import httpx
 import time
 
 from src.generators.image_generator import FluxImageGenerator
-from src.config import config
+from src.config import config, get_daily_output_dirs
 from src.generators.edge_tts_generator import EdgeTTSGenerator  # 無料TTS
 from src.editors.news_graphics import NewsGraphicsCompositor
-from src.config import IMAGES_DIR, VIDEOS_DIR, OUTPUT_DIR
-
-# AUDIO_DIR がなければ作成
-AUDIO_DIR = OUTPUT_DIR / "audio"
-AUDIO_DIR.mkdir(exist_ok=True)
 
 console = Console()
 
@@ -69,6 +64,9 @@ class NewsVideoPipeline:
         self.num_scenes = num_scenes
         self.scene_duration = scene_duration
         
+        # 日付ベースの出力ディレクトリ
+        self.dirs = get_daily_output_dirs()
+        
         # ジェネレーター初期化
         self.image_gen = FluxImageGenerator()
         self.narration_gen = EdgeTTSGenerator()  # 無料TTS (Edge TTS)
@@ -81,6 +79,7 @@ class NewsVideoPipeline:
         os.environ["FAL_KEY"] = config.fal.api_key
         
         console.print(f"[green]NewsVideoPipeline initialized[/green]")
+        console.print(f"  Output: {self.dirs['root']}")
         console.print(f"  Channel: {channel_name}")
         console.print(f"  Scenes: {num_scenes} x {scene_duration}s = {num_scenes * scene_duration}s")
     
@@ -167,6 +166,7 @@ class NewsVideoPipeline:
                 prompt=scene.image_prompt,
                 output_name=output_name,
                 image_size="portrait_16_9",  # 縦動画用
+                output_dir=self.dirs["images"],
             )
             
             if result.success:
@@ -191,7 +191,7 @@ class NewsVideoPipeline:
                 console.print(f"  ⚠️ シーン{scene.index + 1}: 画像がありません")
                 continue
             
-            output_path = str(VIDEOS_DIR / f"{output_prefix}_scene{scene.index + 1}.mp4")
+            output_path = str(self.dirs["videos"] / f"{output_prefix}_scene{scene.index + 1}.mp4")
             
             try:
                 # 画像をfal.aiにアップロード
@@ -240,7 +240,7 @@ class NewsVideoPipeline:
         # 全シーンの字幕を結合
         full_text = "。".join([scene.subtitle for scene in scenes]) + "。"
         
-        main_path = str(AUDIO_DIR / f"{output_prefix}_narration.mp3")
+        main_path = str(self.dirs["audio"] / f"{output_prefix}_narration.mp3")
         result = self.narration_gen.generate(text=full_text, output_path=main_path)
         
         if not result.success:
@@ -252,14 +252,14 @@ class NewsVideoPipeline:
         # 締めナレーションがあれば追加
         if closing_text:
             console.print("  🎤 締めナレーション生成中...")
-            closing_path = str(AUDIO_DIR / f"{output_prefix}_closing.mp3")
+            closing_path = str(self.dirs["audio"] / f"{output_prefix}_closing.mp3")
             closing_result = self.narration_gen.generate(text=closing_text, output_path=closing_path)
             
             if closing_result.success:
                 console.print(f"  ✅ 締め音声: {closing_result.file_path} ({closing_result.duration_seconds:.1f}秒)")
                 
                 # 音声を結合
-                combined_path = str(AUDIO_DIR / f"{output_prefix}_full.mp3")
+                combined_path = str(self.dirs["audio"] / f"{output_prefix}_full.mp3")
                 subprocess.run([
                     "ffmpeg", "-y",
                     "-i", main_path, "-i", closing_path,
@@ -308,8 +308,7 @@ class NewsVideoPipeline:
         width, height = map(int, probe.stdout.strip().split(','))
         
         # 一時ファイル用ディレクトリ
-        temp_dir = VIDEOS_DIR / "temp"
-        temp_dir.mkdir(exist_ok=True)
+        temp_dir = self.dirs["temp"]
         
         # 1. 各シーンにオーバーレイと字幕を追加
         overlaid_videos = []
@@ -433,7 +432,7 @@ class NewsVideoPipeline:
         console.print("  ✅ 動画結合完了")
         
         # 5. 音声を追加
-        final_path = str(VIDEOS_DIR / f"{output_prefix}_final.mp4")
+        final_path = str(self.dirs["final"] / f"{output_prefix}_final.mp4")
         subprocess.run([
             "ffmpeg", "-y",
             "-i", concat_video_path,

@@ -48,6 +48,7 @@ class FluxImageGenerator:
         output_name: str,
         image_size: Optional[str] = None,
         retry_count: int = None,
+        output_dir: Optional[Path] = None,
     ) -> ImageResult:
         """画像を生成
 
@@ -56,6 +57,7 @@ class FluxImageGenerator:
             output_name: 出力ファイル名（拡張子なし）
             image_size: 画像サイズ（landscape_16_9, portrait_16_9, square, etc）
             retry_count: リトライ回数
+            output_dir: 出力ディレクトリ（Noneの場合はデフォルト）
 
         Returns:
             ImageResult
@@ -87,7 +89,9 @@ class FluxImageGenerator:
                     logger.info(f"Image generated: {image_url}")
 
                     # 画像をダウンロードして保存
-                    output_path = IMAGES_DIR / f"{output_name}.png"
+                    save_dir = output_dir or IMAGES_DIR
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                    output_path = save_dir / f"{output_name}.png"
                     if self._download_image(image_url, str(output_path)):
                         return ImageResult(
                             success=True,

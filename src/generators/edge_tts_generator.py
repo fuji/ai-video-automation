@@ -119,6 +119,9 @@ class EdgeTTSGenerator:
         if output_path is None:
             timestamp = int(time.time())
             output_path = str(self.audio_dir / f"narration_{timestamp}.mp3")
+        else:
+            # 親ディレクトリを作成
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         voice = voice or self.DEFAULT_VOICE
         
