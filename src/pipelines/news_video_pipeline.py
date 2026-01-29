@@ -24,6 +24,7 @@ from src.generators.image_generator import FluxImageGenerator
 from src.config import config, get_daily_output_dirs
 from src.generators.edge_tts_generator import EdgeTTSGenerator  # 無料TTS
 from src.editors.news_graphics import NewsGraphicsCompositor
+from src.editors.intro_outro import IntroOutroGenerator, IntroOutroConfig
 from src.audio.bgm_manager import BGMManager, MoodType
 
 console = Console()
@@ -73,6 +74,10 @@ class NewsVideoPipeline:
         self.narration_gen = EdgeTTSGenerator()  # 無料TTS (Edge TTS)
         self.compositor = NewsGraphicsCompositor(channel_name=channel_name)
         self.bgm_manager = BGMManager()  # BGM管理
+        self.intro_outro_gen = IntroOutroGenerator(IntroOutroConfig(
+            channel_name=channel_name,
+            channel_tagline="世界のおもしろニュース",
+        ))
         
         # Gemini for scene analysis
         self.gemini_client = genai.Client(api_key=config.gemini.api_key)
@@ -789,11 +794,31 @@ class NewsVideoPipeline:
             adjusted_videos.append(adjusted_path)
             console.print(f"  ✅ シーン{i+1}: {actual_duration:.1f}秒 → {target_duration:.1f}秒 (x{slowdown:.2f})")
         
-        # 動画を結合
+        # イントロ動画を生成
+        console.print("\n[cyan]🎬 イントロ生成中...[/cyan]")
+        intro_path = str(temp_dir / "intro.mp4")
+        self.intro_outro_gen.generate_intro_video(intro_path, temp_dir)
+        console.print(f"  ✅ イントロ: 3秒")
+        
+        # アウトロ動画を生成
+        console.print("[cyan]🎬 アウトロ生成中...[/cyan]")
+        outro_path = str(temp_dir / "outro.mp4")
+        self.intro_outro_gen.generate_outro_video(outro_path, temp_dir)
+        console.print(f"  ✅ アウトロ: 4秒")
+        
+        # 動画を結合（イントロ + メイン + アウトロ）
+        console.print("\n[cyan]🎬 全体結合中...[/cyan]")
         concat_list = str(temp_dir / "video_concat.txt")
         with open(concat_list, "w") as f:
+            # イントロ
+            if Path(intro_path).exists():
+                f.write(f"file '{intro_path}'\n")
+            # メインシーン
             for vp in adjusted_videos:
                 f.write(f"file '{vp}'\n")
+            # アウトロ
+            if Path(outro_path).exists():
+                f.write(f"file '{outro_path}'\n")
         
         concat_video = str(temp_dir / f"{output_prefix}_concat.mp4")
         subprocess.run([
@@ -801,14 +826,30 @@ class NewsVideoPipeline:
             "-i", concat_list, "-c", "copy", concat_video
         ], capture_output=True)
         
-        # 音声を追加
+        # 音声を追加（イントロ/アウトロ分は無音）
         final_path = str(self.dirs["final"] / f"{output_prefix}_final.mp4")
         
         if combined_audio:
+            # イントロ分の無音(3秒) + メイン音声 + アウトロ分の無音(4秒) を作成
+            intro_duration = 3.0
+            outro_duration = 4.0
+            
+            padded_audio = str(temp_dir / "padded_audio.mp3")
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-t", str(intro_duration), "-i", "anullsrc=r=44100:cl=stereo",
+                "-i", combined_audio,
+                "-f", "lavfi", "-t", str(outro_duration), "-i", "anullsrc=r=44100:cl=stereo",
+                "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]",
+                "-map", "[out]",
+                "-c:a", "aac", "-b:a", "192k",
+                padded_audio
+            ], capture_output=True)
+            
             subprocess.run([
                 "ffmpeg", "-y",
                 "-i", concat_video,
-                "-i", combined_audio,
+                "-i", padded_audio,
                 "-c:v", "copy",
                 "-c:a", "aac", "-b:a", "192k",
                 "-shortest",
