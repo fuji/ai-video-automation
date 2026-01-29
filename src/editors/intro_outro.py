@@ -20,8 +20,8 @@ class IntroOutroConfig:
     width: int = 1080
     height: int = 1920
     fps: int = 30
-    intro_duration: float = 3.0
-    outro_duration: float = 4.0
+    intro_duration: float = 2.0  # 短めに
+    outro_duration: float = 3.0  # 短めに
     
     # カラー
     bg_color: str = "#1a1a2e"  # ダークブルー
@@ -69,66 +69,47 @@ class IntroOutroGenerator:
             self.font_small = ImageFont.load_default()
     
     def create_intro_frames(self, output_dir: Path) -> list[str]:
-        """イントロのフレームを生成"""
+        """イントロのフレームを生成 - 白背景 + 赤丸スムース拡大 + 白文字静止"""
         output_dir.mkdir(parents=True, exist_ok=True)
         
         frames = []
         total_frames = int(self.config.intro_duration * self.config.fps)
         
+        import math
+        
         for i in range(total_frames):
             progress = i / total_frames
             frame_path = output_dir / f"intro_{i:04d}.png"
             
-            img = Image.new('RGB', (self.config.width, self.config.height), self.config.bg_color)
+            # 白背景
+            img = Image.new('RGB', (self.config.width, self.config.height), '#ffffff')
             draw = ImageDraw.Draw(img)
             
-            # アニメーション効果
-            # 0-0.3: フェードイン + ズームイン
-            # 0.3-0.7: 安定表示
-            # 0.7-1.0: 軽くパルス
-            
-            if progress < 0.3:
-                alpha = progress / 0.3
-                scale = 0.8 + 0.2 * (progress / 0.3)
-            elif progress < 0.7:
-                alpha = 1.0
-                scale = 1.0
-            else:
-                alpha = 1.0
-                pulse = 1.0 + 0.02 * abs((progress - 0.7) / 0.3 - 0.5) * 2
-                scale = pulse
-            
-            # 背景グラデーション風の円
             center_x, center_y = self.config.width // 2, self.config.height // 2
             
-            # アクセントサークル（アニメーション）
-            circle_radius = int(200 * scale)
-            draw.ellipse(
-                [center_x - circle_radius, center_y - circle_radius - 100,
-                 center_x + circle_radius, center_y + circle_radius - 100],
-                fill=self.config.accent_color
-            )
+            # 赤丸のスムースな拡大（イージング: ease-out）
+            # 0→1 に ease-out で拡大
+            eased = 1 - (1 - progress) ** 3  # cubic ease-out
+            min_radius = 0
+            max_radius = 280
+            circle_radius = int(min_radius + (max_radius - min_radius) * eased)
             
-            # チャンネル名
+            if circle_radius > 0:
+                draw.ellipse(
+                    [center_x - circle_radius, center_y - circle_radius,
+                     center_x + circle_radius, center_y + circle_radius],
+                    fill=self.config.accent_color
+                )
+            
+            # チャンネル名（白文字、静止、常に表示）
             text = self.config.channel_name
             bbox = draw.textbbox((0, 0), text, font=self.font_large)
             text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
             text_x = (self.config.width - text_width) // 2
-            text_y = center_y + 50
+            text_y = center_y - text_height // 2
             
-            # テキストの透明度を表現（背景色とブレンド）
-            text_color = self._blend_color(self.config.text_color, self.config.bg_color, alpha)
-            draw.text((text_x, text_y), text, font=self.font_large, fill=text_color)
-            
-            # タグライン
-            tagline = self.config.channel_tagline
-            bbox = draw.textbbox((0, 0), tagline, font=self.font_medium)
-            tag_width = bbox[2] - bbox[0]
-            tag_x = (self.config.width - tag_width) // 2
-            tag_y = text_y + 100
-            
-            tag_color = self._blend_color(self.config.text_color, self.config.bg_color, alpha * 0.8)
-            draw.text((tag_x, tag_y), tagline, font=self.font_medium, fill=tag_color)
+            draw.text((text_x, text_y), text, font=self.font_large, fill='#ffffff')
             
             img.save(frame_path)
             frames.append(str(frame_path))
@@ -136,7 +117,7 @@ class IntroOutroGenerator:
         return frames
     
     def create_outro_frames(self, output_dir: Path) -> list[str]:
-        """アウトロのフレームを生成"""
+        """アウトロのフレームを生成 - シンプル白背景"""
         output_dir.mkdir(parents=True, exist_ok=True)
         
         frames = []
@@ -146,7 +127,8 @@ class IntroOutroGenerator:
             progress = i / total_frames
             frame_path = output_dir / f"outro_{i:04d}.png"
             
-            img = Image.new('RGB', (self.config.width, self.config.height), self.config.bg_color)
+            # 白背景
+            img = Image.new('RGB', (self.config.width, self.config.height), '#ffffff')
             draw = ImageDraw.Draw(img)
             
             center_x, center_y = self.config.width // 2, self.config.height // 2
@@ -157,20 +139,14 @@ class IntroOutroGenerator:
             else:
                 alpha = 1.0
             
-            # 👍 いいねボタン風
-            thumb_y = center_y - 200
-            thumb_text = "👍"
-            # 絵文字のサイズ調整
-            draw.text((center_x - 60, thumb_y), thumb_text, font=self.font_large, fill=self.config.text_color)
-            
             # メインテキスト
             main_text = "ご視聴ありがとう！"
             bbox = draw.textbbox((0, 0), main_text, font=self.font_large)
             text_width = bbox[2] - bbox[0]
             text_x = (self.config.width - text_width) // 2
-            text_y = center_y
+            text_y = center_y - 100
             
-            text_color = self._blend_color(self.config.text_color, self.config.bg_color, alpha)
+            text_color = self._blend_color('#333333', '#ffffff', alpha)
             draw.text((text_x, text_y), main_text, font=self.font_large, fill=text_color)
             
             # サブテキスト
@@ -185,17 +161,17 @@ class IntroOutroGenerator:
                 sub_x = (self.config.width - sub_width) // 2
                 sub_y = text_y + 120 + j * 70
                 
-                sub_color = self._blend_color(self.config.text_color, self.config.bg_color, alpha * 0.9)
+                sub_color = self._blend_color('#666666', '#ffffff', alpha * 0.9)
                 draw.text((sub_x, sub_y), sub_text, font=self.font_medium, fill=sub_color)
             
-            # チャンネル名（下部）
+            # チャンネル名（下部）- 赤文字
             channel_text = self.config.channel_name
             bbox = draw.textbbox((0, 0), channel_text, font=self.font_small)
             ch_width = bbox[2] - bbox[0]
             ch_x = (self.config.width - ch_width) // 2
             ch_y = self.config.height - 200
             
-            ch_color = self._blend_color(self.config.accent_color, self.config.bg_color, alpha)
+            ch_color = self._blend_color(self.config.accent_color, '#ffffff', alpha)
             draw.text((ch_x, ch_y), channel_text, font=self.font_small, fill=ch_color)
             
             img.save(frame_path)
