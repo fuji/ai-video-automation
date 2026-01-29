@@ -60,7 +60,7 @@ class NewsVideoPipeline:
     def __init__(
         self,
         channel_name: str = "FJ News 24",
-        num_scenes: int = 4,  # 4シーンで約20秒のベース動画
+        num_scenes: int = 10,  # 10シーンで約60-90秒の動画
         scene_duration: float = 5.0,
         use_remotion: bool = True,  # Remotion を使う（無料）か Luma を使う（有料）
     ):
@@ -102,12 +102,113 @@ class NewsVideoPipeline:
         console.print(f"  Scenes: {num_scenes} x {scene_duration}s = {num_scenes * scene_duration}s")
         console.print(f"  Mode: {'Remotion (無料)' if use_remotion else 'Luma (有料)'}")
     
+    def generate_scenes_data(
+        self,
+        article_text: str,
+        headline: str,
+        num_scenes: int = 10,
+    ) -> dict:
+        """記事からシーン構成データを生成（ユーモア付き、長めナレーション）
+        
+        Returns:
+            dict: run() に渡せる形式 {headline, sub_headline, scenes_data, closing_text, ...}
+        """
+        
+        prompt = f"""あなたはニュース動画のスクリプトライターです。以下の記事を面白く、視聴者が最後まで見たくなるような動画に構成してください。
+
+# 記事
+タイトル: {headline}
+本文: {article_text}
+
+# 重要な指示
+1. **ユーモアを入れる**: 真面目すぎず、軽いツッコミや面白い視点を入れる
+2. **視聴者を引き込む**: 冒頭で「え、何それ？」と思わせるフック
+3. **長めのナレーション**: 各シーン8-15秒程度のナレーション（30-60文字）
+4. **感情を込める**: 驚き、感動、笑いなど感情が伝わるように
+5. **締めの一言**: 印象に残る締めくくり
+
+# ユーモアの例
+❌ 猫が250km歩いて帰還しました。
+✅ グーグルマップも、スマホも使わずに250km。猫ってすごいですね。
+
+❌ 2歳の子供が世界記録を達成しました。
+✅ まだオムツが取れてないのに世界記録。大人の面目丸つぶれです。
+
+# シーン構成（4グループ × 3シーン = 12シーン固定）
+記事を4つのパートに分割し、各パートに1つの画像（image_group）を割り当てる：
+- グループ1: 導入・状況設定（3シーン）
+- グループ2: 展開・出来事の詳細（3シーン）
+- グループ3: クライマックス・最も印象的な部分（3シーン）
+- グループ4: 結末・締めくくり（3シーン）
+
+各グループ内の3シーンは同じ画像を使うので、ナレーションで変化をつける。
+
+# 出力形式 (JSON)
+```json
+{{
+  "headline": "短いタイトル（15文字以内）",
+  "sub_headline": "サブタイトル（20文字以内）",
+  "mood": "emotional|funny|dramatic|informative",
+  "scenes": [
+    {{"image_group": 1, "visual_description": "グループ1の画像説明（英語）", "narration": "ナレーション1-1"}},
+    {{"image_group": 1, "visual_description": "（同上）", "narration": "ナレーション1-2"}},
+    {{"image_group": 1, "visual_description": "（同上）", "narration": "ナレーション1-3"}},
+    {{"image_group": 2, "visual_description": "グループ2の画像説明（英語）", "narration": "ナレーション2-1"}},
+    {{"image_group": 2, "visual_description": "（同上）", "narration": "ナレーション2-2"}},
+    {{"image_group": 2, "visual_description": "（同上）", "narration": "ナレーション2-3"}},
+    {{"image_group": 3, "visual_description": "グループ3の画像説明（英語）", "narration": "ナレーション3-1"}},
+    {{"image_group": 3, "visual_description": "（同上）", "narration": "ナレーション3-2"}},
+    {{"image_group": 3, "visual_description": "（同上）", "narration": "ナレーション3-3"}},
+    {{"image_group": 4, "visual_description": "グループ4の画像説明（英語）", "narration": "ナレーション4-1"}},
+    {{"image_group": 4, "visual_description": "（同上）", "narration": "ナレーション4-2"}},
+    {{"image_group": 4, "visual_description": "（同上）", "narration": "ナレーション4-3"}}
+  ],
+  "closing_text": "締めの一言（日本語、20文字程度）"
+}}
+```
+
+**必ず12シーン（4グループ × 3シーン）で生成してください。**"""
+
+        console.print(f"\n[cyan]📝 シーン構成を生成中（{num_scenes}シーン）...[/cyan]")
+        
+        response = self.gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
+        
+        # JSONを抽出
+        content = response.text
+        json_start = content.find("{")
+        json_end = content.rfind("}") + 1
+        json_str = content[json_start:json_end]
+        
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            console.print(f"[yellow]⚠️ JSON パースエラー、修正を試みます...[/yellow]")
+            import re
+            # 余分なカンマを削除、改行を整理
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError:
+                console.print(f"[red]❌ JSON パース失敗[/red]")
+                console.print(f"[dim]{content[:800]}...[/dim]")
+                raise
+        
+        console.print(f"  ✅ {len(data.get('scenes', []))}シーン生成")
+        console.print(f"  📰 {data.get('headline', headline)}")
+        console.print(f"  🎭 ムード: {data.get('mood', 'neutral')}")
+        
+        return data
+    
     def analyze_article(
         self,
         article_text: str,
         headline: str,
     ) -> list[Scene]:
-        """記事を分析して複数シーンに分解"""
+        """記事を分析して複数シーンに分解（後方互換用）"""
         
         prompt = f"""以下のニュース記事を{self.num_scenes}つの映像的なシーンに分解してください。
 
@@ -235,29 +336,70 @@ class NewsVideoPipeline:
             "informative": ["#4ECDC4", "#44A08D"],
         }
         
+        # 画像グループごとにアニメーション進捗を計算（v11方式）
+        # 同じ画像を使うシーンでアニメーションが継続する
+        image_groups = {}  # image_path -> list of scene indices
+        image_group_numbers = {}  # image_path -> group number (1-based)
+        group_counter = 1
+        for scene in scenes:
+            img = getattr(scene, 'image_path', None)
+            if img:
+                if img not in image_groups:
+                    image_groups[img] = []
+                    image_group_numbers[img] = group_counter
+                    group_counter += 1
+                image_groups[img].append(scene.index)
+        
+        # 各グループの合計時間を計算
+        group_durations = {}
+        for img, indices in image_groups.items():
+            total = sum(getattr(scenes[i], 'audio_duration', 5.0) or 5.0 for i in indices)
+            group_durations[img] = total
+        
+        # 各シーンのアニメーション開始/終了位置を計算
+        group_progress = {img: 0.0 for img in image_groups}
+        scene_anim = {}  # scene.index -> (start, end)
+        for scene in scenes:
+            img = getattr(scene, 'image_path', None)
+            if img and img in group_durations:
+                total = group_durations[img]
+                dur = getattr(scene, 'audio_duration', 5.0) or 5.0
+                start = group_progress[img] / total if total > 0 else 0
+                group_progress[img] += dur
+                end = group_progress[img] / total if total > 0 else 1
+                scene_anim[scene.index] = (start, end)
+            else:
+                scene_anim[scene.index] = (0.0, 1.0)
+        
         for scene in scenes:
             output_path = str(self.dirs["videos"] / f"{output_prefix}_scene{scene.index + 1}.mp4")
             duration = getattr(scene, 'audio_duration', 5.0) or 5.0
             narration_text = getattr(scene, 'narration_text', scene.subtitle) or scene.description
+            anim_start, anim_end = scene_anim.get(scene.index, (0.0, 1.0))
+            
+            # 画像グループ番号を取得（同じ画像 = 同じアニメーションパターン）
+            img = getattr(scene, 'image_path', None)
+            group_num = image_group_numbers.get(img, scene.index + 1) if img else scene.index + 1
             
             # 背景画像があればニュース風、なければモーショングラフィックス
             if scene.image_path and news_style:
                 # ニュース風（背景画像 + オーバーレイ）
                 # - チャンネルロゴ: 全シーンで表示
-                # - バナー（BREAKING + タイトル + サブタイトル）: 最初のシーンのみ
+                # - バナー（BREAKING + タイトル + サブタイトル）: 全シーンで表示
                 # - 字幕: 全シーンで表示
-                is_first_scene = scene.index == 0
                 result = self.remotion_gen.generate_news_scene(
-                    scene_number=scene.index + 1,
+                    scene_number=group_num,  # 画像グループ番号でアニメーションパターン決定
                     duration=duration,
                     output_path=output_path,
                     background_image=scene.image_path,
-                    subtitle=narration_text[:50] if narration_text else "",
-                    headline=headline if is_first_scene else "",
-                    sub_headline=sub_headline if is_first_scene else "",
+                    subtitle=narration_text if narration_text else "",  # 全文表示
+                    headline=headline,  # 全シーンで表示
+                    sub_headline=sub_headline,  # 全シーンで表示
                     channel_name=self.channel_name,
-                    is_breaking=is_breaking and is_first_scene,
-                    show_overlay=is_first_scene,  # バナーは最初のシーンのみ
+                    is_breaking=is_breaking,  # 全シーンで表示
+                    show_overlay=True,  # 全シーンで表示
+                    animation_start=anim_start,
+                    animation_end=anim_end,
                 )
             else:
                 # モーショングラフィックス風（グラデーション背景）
@@ -606,6 +748,7 @@ class NewsVideoPipeline:
         article_text: str = "",  # 後方互換用
         output_prefix: Optional[str] = None,
         is_breaking: bool = True,
+        existing_images: list[str] = None,  # 既存画像パス
     ) -> NewsVideoResult:
         """パイプライン全体を実行
         
@@ -643,6 +786,7 @@ class NewsVideoPipeline:
                     visual_style=visual_style,
                     output_prefix=output_prefix,
                     is_breaking=is_breaking,
+                    existing_images=existing_images,
                 )
             
             # 後方互換: 従来のフロー（article_textから分析）
@@ -714,6 +858,7 @@ class NewsVideoPipeline:
         output_prefix: str,
         is_breaking: bool,
         mood: str = "exciting",
+        existing_images: list[str] = None,
     ) -> NewsVideoResult:
         """シーン同期フロー: 各シーンのナレーションと映像を同期させる"""
         
@@ -758,9 +903,15 @@ class NewsVideoPipeline:
                         scene.audio_duration = result.duration_seconds
                         console.print(f"  ✅ シーン{scene.index + 1}: {result.duration_seconds:.1f}秒")
             
-            # 画像生成（ニュース風の背景用）
-            console.print("\n[cyan]🖼️ 背景画像を生成中 (Flux)...[/cyan]")
-            scenes = self.generate_scene_images(scenes, output_prefix)
+            # 画像生成（ニュース風の背景用）または既存画像を使用
+            if existing_images and len(existing_images) >= len(scenes):
+                console.print("\n[cyan]🖼️ 既存画像を使用...[/cyan]")
+                for i, scene in enumerate(scenes):
+                    scene.image_path = str(Path(existing_images[i]).resolve())
+                    console.print(f"  ✅ シーン{i+1}: {existing_images[i]}")
+            else:
+                console.print("\n[cyan]🖼️ 背景画像を生成中 (Flux)...[/cyan]")
+                scenes = self.generate_scene_images(scenes, output_prefix)
             
             # Remotion で動画生成（背景画像 + ニュースオーバーレイ）
             scenes = self.generate_scene_videos_remotion(
@@ -852,7 +1003,7 @@ class NewsVideoPipeline:
                     bgm_path=bgm_track.path,
                     output_path=mixed_audio,
                     narration_volume=1.0,
-                    bgm_volume=0.12,  # BGMは控えめ
+                    bgm_volume=0.18,  # BGMは控えめだが聞こえる程度
                 ):
                     final_audio = mixed_audio
                     console.print(f"  ✅ BGM追加: {bgm_track.name}")
@@ -1053,16 +1204,31 @@ class NewsVideoPipeline:
             "-i", concat_list, "-c", "copy", concat_video
         ], capture_output=True)
         
-        # 音声を追加（イントロ/アウトロ分は無音）
+        # 音声を追加（イントロ分は無音パディング）
         final_path = str(self.dirs["final"] / f"{output_prefix}_final.mp4")
         
         if combined_audio:
-            # イントロ分の無音(2秒) + メイン音声 + アウトロ分の無音(3秒) を作成
-            # 直接音声を追加（イントロ/アウトロは無音になる）
+            # イントロ分の無音(3秒)を音声の前にパディング
+            padded_audio = str(temp_dir / f"{output_prefix}_padded.mp3")
+            pad_result = subprocess.run([
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-t", "3", "-i", "anullsrc=r=44100:cl=stereo",  # 3秒無音
+                "-i", combined_audio,
+                "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[out]",
+                "-map", "[out]",
+                "-c:a", "libmp3lame", "-b:a", "192k",
+                padded_audio
+            ], capture_output=True, text=True)
+            
+            if pad_result.returncode != 0:
+                console.print(f"[yellow]⚠️ 無音パディング失敗、元の音声を使用[/yellow]")
+                padded_audio = combined_audio
+            
+            # パディング済み音声を動画と合成
             result = subprocess.run([
                 "ffmpeg", "-y",
                 "-i", concat_video,
-                "-i", combined_audio,
+                "-i", padded_audio,
                 "-c:v", "copy",
                 "-c:a", "aac", "-b:a", "192k",
                 "-shortest",
