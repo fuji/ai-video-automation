@@ -123,60 +123,89 @@ class NewsVideoPipeline:
             dict: run() に渡せる形式 {headline, sub_headline, scenes_data, closing_text, ...}
         """
         
-        prompt = f"""あなたはニュース動画のスクリプトライターです。以下の記事を面白く、視聴者が最後まで見たくなるような動画に構成してください。
+        # 心理学的テクニックをランダムに選択
+        import random
+        psych_techniques = [
+            "ツァイガルニク効果: 「続きは...」「その結果...」で次への期待を煽る",
+            "社会的証明: 「SNSで話題」「〇万人が驚いた」などの数字を入れる",
+            "希少性: 「知る人ぞ知る」「1%の人しか知らない」など特別感を出す",
+            "感情移入: 登場人物に名前をつけて親近感を持たせる",
+            "対比効果: 「普通なら〇〇、でもこの人は△△」で驚きを強調",
+        ]
+        selected_technique = random.choice(psych_techniques)
+        
+        # 視覚的バリエーションをランダムに選択
+        visual_variations = [
+            "クローズアップ（顔や手元のディテール）を意識した構図",
+            "広角・引きの構図で全体の状況を見せる",
+            "ドラマチックな光と影のコントラスト",
+            "鮮やかな色彩で印象的に",
+            "ドキュメンタリー風のリアルな雰囲気",
+        ]
+        selected_visual = random.choice(visual_variations)
+        
+        prompt = f"""あなたはバズる動画のスクリプトライターです。視聴者が最初の3秒で引き込まれ、最後まで見たくなる動画を作ってください。
 
 # 記事
 タイトル: {headline}
 本文: {article_text}
 
-# 重要な指示
-1. **ユーモアを入れる**: 真面目すぎず、軽いツッコミや面白い視点を入れる
-2. **視聴者を引き込む**: 冒頭で「え、何それ？」と思わせるフック
-3. **長めのナレーション**: 各シーン8-15秒程度のナレーション（30-60文字）
-4. **感情を込める**: 驚き、感動、笑いなど感情が伝わるように
-5. **締めの一言**: 印象に残る締めくくり
+# 🎣 フック（超重要！）
+**疑問形で始める**: 視聴者に「え、何それ？」と思わせる
+例:
+- 「250km歩いて帰る猫、見たことある？」
+- 「2歳児が世界記録、信じられる？」
+- 「物乞いが実は億万長者だったら？」
 
-# ユーモアの例
-❌ 猫が250km歩いて帰還しました。
-✅ グーグルマップも、スマホも使わずに250km。猫ってすごいですね。
+# 🔍 ミステリー型構成（謎→手がかり→種明かし）
+- グループ1（謎の提示）: 衝撃的な事実や疑問を投げかける。「なぜ？」「どうやって？」を視聴者に思わせる
+- グループ2（手がかり）: 背景や状況を説明。でも核心はまだ明かさない
+- グループ3（展開）: 事態が動く。驚きの展開や転換点
+- グループ4（種明かし）: 答え合わせ。感動や驚きの結末
 
-❌ 2歳の子供が世界記録を達成しました。
-✅ まだオムツが取れてないのに世界記録。大人の面目丸つぶれです。
+# ⏱️ シーンの長さ（重要！）
+各シーンの narration の文字数で長さをコントロール:
+- 導入（グループ1）: **短くテンポよく**（各15-25文字）→ 3-4秒
+- 展開（グループ2,3）: **じっくり**（各30-50文字）→ 5-7秒  
+- クライマックス: **最も長く**（40-60文字）→ 7-8秒
+- 衝撃の後: **短い間**（10-15文字）→ 2-3秒の「間」を作る
 
-# シーン構成（4グループ × 3シーン = 12シーン固定）
-記事を4つのパートに分割し、各パートに1つの画像（image_group）を割り当てる：
-- グループ1: 導入・状況設定（3シーン）
-- グループ2: 展開・出来事の詳細（3シーン）
-- グループ3: クライマックス・最も印象的な部分（3シーン）
-- グループ4: 結末・締めくくり（3シーン）
+# 🎭 今回使う心理学テクニック
+{selected_technique}
 
-各グループ内の3シーンは同じ画像を使うので、ナレーションで変化をつける。
+# 🎨 今回の視覚スタイル
+{selected_visual}
+
+# ユーモアの入れ方
+❌ 猫が250km歩いて帰還しました。（説明的でつまらない）
+✅ グーグルマップなし、スマホなし、250km。猫のナビ、最強すぎない？（ツッコミ + 疑問形）
 
 # 出力形式 (JSON)
 ```json
 {{
-  "headline": "短いタイトル（15文字以内）",
+  "headline": "短いタイトル（15文字以内、インパクト重視）",
   "sub_headline": "サブタイトル（20文字以内）",
+  "hook": "疑問形のフック（視聴者への問いかけ）",
   "mood": "emotional|funny|dramatic|informative",
   "scenes": [
-    {{"image_group": 1, "visual_description": "グループ1の画像説明（英語）", "narration": "ナレーション1-1"}},
-    {{"image_group": 1, "visual_description": "（同上）", "narration": "ナレーション1-2"}},
-    {{"image_group": 1, "visual_description": "（同上）", "narration": "ナレーション1-3"}},
-    {{"image_group": 2, "visual_description": "グループ2の画像説明（英語）", "narration": "ナレーション2-1"}},
-    {{"image_group": 2, "visual_description": "（同上）", "narration": "ナレーション2-2"}},
-    {{"image_group": 2, "visual_description": "（同上）", "narration": "ナレーション2-3"}},
-    {{"image_group": 3, "visual_description": "グループ3の画像説明（英語）", "narration": "ナレーション3-1"}},
-    {{"image_group": 3, "visual_description": "（同上）", "narration": "ナレーション3-2"}},
-    {{"image_group": 3, "visual_description": "（同上）", "narration": "ナレーション3-3"}},
-    {{"image_group": 4, "visual_description": "グループ4の画像説明（英語）", "narration": "ナレーション4-1"}},
-    {{"image_group": 4, "visual_description": "（同上）", "narration": "ナレーション4-2"}},
-    {{"image_group": 4, "visual_description": "（同上）", "narration": "ナレーション4-3"}}
+    {{"image_group": 1, "visual_description": "グループ1の画像説明（英語、{selected_visual}を意識）", "narration": "短めのナレーション（謎の提示）", "pace": "fast"}},
+    {{"image_group": 1, "visual_description": "（同上）", "narration": "...", "pace": "fast"}},
+    {{"image_group": 1, "visual_description": "（同上）", "narration": "...", "pace": "fast"}},
+    {{"image_group": 2, "visual_description": "グループ2の画像説明（英語）", "narration": "背景説明（手がかり）", "pace": "normal"}},
+    {{"image_group": 2, "visual_description": "（同上）", "narration": "...", "pace": "normal"}},
+    {{"image_group": 2, "visual_description": "（同上）", "narration": "...", "pace": "normal"}},
+    {{"image_group": 3, "visual_description": "グループ3の画像説明（英語）", "narration": "驚きの展開", "pace": "slow"}},
+    {{"image_group": 3, "visual_description": "（同上）", "narration": "クライマックス（長め）", "pace": "slow"}},
+    {{"image_group": 3, "visual_description": "（同上）", "narration": "...", "pace": "pause"}},
+    {{"image_group": 4, "visual_description": "グループ4の画像説明（英語）", "narration": "種明かし・結末", "pace": "normal"}},
+    {{"image_group": 4, "visual_description": "（同上）", "narration": "...", "pace": "normal"}},
+    {{"image_group": 4, "visual_description": "（同上）", "narration": "締めの一言", "pace": "slow"}}
   ],
-  "closing_text": "締めの一言（日本語、20文字程度）"
+  "closing_text": "印象に残る締め（20文字程度）"
 }}
 ```
 
-**必ず12シーン（4グループ × 3シーン）で生成してください。**"""
+**必ず12シーン（4グループ × 3シーン）で生成。ナレーションの長さでテンポをコントロール！**"""
 
         console.print(f"\n[cyan]📝 シーン構成を生成中（{num_scenes}シーン）...[/cyan]")
         
