@@ -54,3 +54,4 @@ Thumbs.db
 
 # Project files
 project_*.json
+test_with_existing_images.py
