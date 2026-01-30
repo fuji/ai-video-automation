@@ -367,8 +367,8 @@ class NewsVideoPipeline:
         group_images = {}  # image_group番号 -> image_path
         
         for scene in scenes:
-            # image_group があれば使う、なければ scene.index + 1
-            image_group = getattr(scene, 'image_group', None) or (scene.index + 1)
+            # image_group があれば使う、なければ 3シーンごとに1グループ
+            image_group = getattr(scene, 'image_group', None) or ((scene.index // 3) + 1)
             
             if image_group in group_images:
                 # 既に生成済みの画像を使う
@@ -470,7 +470,8 @@ class NewsVideoPipeline:
             
             # 画像グループ番号を取得（同じ画像 = 同じアニメーションパターン）
             img = getattr(scene, 'image_path', None)
-            group_num = image_group_numbers.get(img, scene.index + 1) if img else scene.index + 1
+            default_group = (scene.index // 3) + 1  # 3シーンごとに1グループ
+            group_num = image_group_numbers.get(img, default_group) if img else default_group
             
             # 背景画像があればニュース風、なければモーショングラフィックス
             if scene.image_path and news_style:
