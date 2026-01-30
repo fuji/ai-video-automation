@@ -1,7 +1,7 @@
 """生成モジュール - 画像・動画・ナレーション生成"""
 
 from .content_planner import ContentPlanner, VideoProject, Scene, create_sample_project
-from .image_generator import ImageGenerator, FluxImageGenerator
+from .image_generator import ImageGenerator, FluxImageGenerator, PollinationsImageGenerator
 # video_generator.py (Kling) は削除済み - Veo を使用
 from .edge_tts_generator import EdgeTTSGenerator, EdgeTTSConfig, NarrationResult
 from .news_explainer import NewsExplainer, NewsExplanation

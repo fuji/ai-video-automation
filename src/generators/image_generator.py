@@ -1,7 +1,8 @@
-"""画像生成モジュール - Flux Pro via fal.ai"""
+"""画像生成モジュール - Flux Pro via fal.ai / Pollinations.ai (無料)"""
 
 import os
 import time
+import urllib.parse
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
@@ -203,25 +204,215 @@ class FluxImageGenerator:
         return prompt
 
 
+class PollinationsImageGenerator:
+    """Pollinations.ai を使用した無料画像生成"""
+
+    BASE_URL = "https://image.pollinations.ai/prompt"
+
+    def __init__(self):
+        self.model = "flux"  # flux, flux-realism, flux-anime など
+        self.default_width = 1920
+        self.default_height = 1080
+        logger.info(f"PollinationsImageGenerator initialized (model: {self.model})")
+
+    def generate(
+        self,
+        prompt: str,
+        output_name: str,
+        image_size: Optional[str] = None,
+        retry_count: int = None,
+        output_dir: Optional[Path] = None,
+        width: int = None,
+        height: int = None,
+    ) -> ImageResult:
+        """画像を生成
+
+        Args:
+            prompt: 画像生成プロンプト
+            output_name: 出力ファイル名（拡張子なし）
+            image_size: 画像サイズ（landscape_16_9 等、width/height より優先度低）
+            retry_count: リトライ回数
+            output_dir: 出力ディレクトリ
+            width: 幅（デフォルト 1920）
+            height: 高さ（デフォルト 1080）
+
+        Returns:
+            ImageResult
+        """
+        start_time = time.time()
+        retries = retry_count or 3
+
+        # サイズ決定
+        if width is None:
+            width = self.default_width
+        if height is None:
+            height = self.default_height
+        
+        # image_size が指定されていたら変換
+        if image_size:
+            if "landscape" in image_size or "16_9" in image_size:
+                width, height = 1920, 1080
+            elif "portrait" in image_size:
+                width, height = 1080, 1920
+            elif "square" in image_size:
+                width, height = 1024, 1024
+
+        logger.info(f"Generating image: {output_name} ({width}x{height})")
+        logger.debug(f"Prompt: {prompt[:100]}...")
+
+        # プロンプトを強化
+        enhanced_prompt = self._enhance_prompt(prompt)
+        
+        for attempt in range(retries):
+            try:
+                # URL 構築
+                encoded_prompt = urllib.parse.quote(enhanced_prompt)
+                url = (
+                    f"{self.BASE_URL}/{encoded_prompt}"
+                    f"?width={width}&height={height}"
+                    f"&model={self.model}"
+                    f"&nologo=true"
+                    f"&seed={int(time.time()) + attempt}"  # リトライ時に違う結果
+                )
+
+                logger.debug(f"Pollinations URL: {url[:100]}...")
+
+                # 画像をダウンロード
+                with httpx.Client(timeout=120, follow_redirects=True) as client:
+                    response = client.get(url)
+
+                    if response.status_code == 200:
+                        # 保存
+                        save_dir = output_dir or IMAGES_DIR
+                        save_dir.mkdir(parents=True, exist_ok=True)
+                        output_path = save_dir / f"{output_name}.png"
+
+                        image = Image.open(io.BytesIO(response.content))
+                        image.save(output_path, "PNG")
+                        logger.info(f"Image saved: {output_path}")
+
+                        return ImageResult(
+                            success=True,
+                            file_path=str(output_path),
+                            image_url=url,
+                            generation_time=time.time() - start_time,
+                        )
+                    else:
+                        logger.warning(f"HTTP {response.status_code}: {response.text[:100]}")
+
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1}/{retries} failed: {e}")
+
+            if attempt < retries - 1:
+                time.sleep(2)  # リトライ前に待機
+
+        return ImageResult(
+            success=False,
+            error_message="All attempts failed",
+            generation_time=time.time() - start_time,
+        )
+
+    def _enhance_prompt(self, prompt: str) -> str:
+        """プロンプトを品質向上用に強化"""
+        quality_suffix = (
+            ", cinematic lighting, 8k uhd, highly detailed, "
+            "professional photography, sharp focus"
+        )
+        # 既に品質タグがあれば追加しない
+        if "8k" in prompt.lower() or "highly detailed" in prompt.lower():
+            return prompt
+        return prompt + quality_suffix
+
+    def _download_image(self, url: str, output_path: str) -> bool:
+        """画像をダウンロードして保存"""
+        try:
+            with httpx.Client(timeout=120, follow_redirects=True) as client:
+                response = client.get(url)
+
+                if response.status_code == 200:
+                    image = Image.open(io.BytesIO(response.content))
+                    image.save(output_path, "PNG")
+                    logger.info(f"Image saved: {output_path}")
+                    return True
+                else:
+                    logger.error(f"Download failed: {response.status_code}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            return False
+
+    def generate_batch(
+        self,
+        prompts: list[tuple[str, str]],
+        image_size: Optional[str] = None,
+    ) -> list[ImageResult]:
+        """複数画像をバッチ生成"""
+        results = []
+
+        for i, (prompt, name) in enumerate(prompts):
+            logger.info(f"Batch progress: {i + 1}/{len(prompts)}")
+            result = self.generate(prompt, name, image_size)
+            results.append(result)
+
+            # レート制限対策
+            if i < len(prompts) - 1:
+                time.sleep(2)
+
+        return results
+
+    def generate_news_image(
+        self,
+        news_title: str,
+        news_summary: str,
+        style: str = "photorealistic",
+        output_name: str = "news_image",
+    ) -> ImageResult:
+        """ニュース用の画像を生成"""
+        prompt = self._build_news_prompt(news_title, news_summary, style)
+        return self.generate(prompt, output_name)
+
+    def _build_news_prompt(
+        self,
+        title: str,
+        summary: str,
+        style: str,
+    ) -> str:
+        """ニュース画像用のプロンプトを構築"""
+        style_prefixes = {
+            "photorealistic": "Photorealistic news photography style,",
+            "cinematic": "Cinematic news broadcast style, dramatic lighting,",
+            "documentary": "Documentary photography style, natural lighting,",
+            "infographic": "Clean infographic style, data visualization,",
+        }
+
+        prefix = style_prefixes.get(style, style_prefixes["photorealistic"])
+        prompt = f"{prefix} {title}. {summary}"
+
+        return prompt
+
+
 # 後方互換性のためのエイリアス
 class ImageGenerator(FluxImageGenerator):
     """ImageGenerator のエイリアス（後方互換性）"""
     pass
 
 
-def create_image_generator(provider: str = "flux") -> FluxImageGenerator:
+def create_image_generator(provider: str = "pollinations") -> FluxImageGenerator | PollinationsImageGenerator:
     """画像生成器のファクトリー関数
 
     Args:
-        provider: プロバイダー名（"flux" のみサポート）
+        provider: プロバイダー名（"flux", "pollinations"）
 
     Returns:
-        FluxImageGenerator
+        画像生成器インスタンス
     """
     if provider == "flux":
         return FluxImageGenerator()
+    elif provider == "pollinations":
+        return PollinationsImageGenerator()
     else:
-        raise ValueError(f"Unknown provider: {provider}. Use 'flux'.")
+        raise ValueError(f"Unknown provider: {provider}. Use 'flux' or 'pollinations'.")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ import fal_client
 import httpx
 import time
 
-from src.generators.image_generator import FluxImageGenerator
+from src.generators.image_generator import FluxImageGenerator, PollinationsImageGenerator
 from src.generators.remotion_generator import RemotionGenerator, SceneConfig
 from src.config import config, get_daily_output_dirs
 from src.generators.edge_tts_generator import EdgeTTSGenerator  # 無料TTS
@@ -63,17 +63,25 @@ class NewsVideoPipeline:
         num_scenes: int = 10,  # 10シーンで約60-90秒の動画
         scene_duration: float = 5.0,
         use_remotion: bool = True,  # Remotion を使う（無料）か Luma を使う（有料）
+        image_provider: str = "pollinations",  # "pollinations" (無料) or "flux" (有料)
     ):
         self.channel_name = channel_name
         self.num_scenes = num_scenes
         self.scene_duration = scene_duration
         self.use_remotion = use_remotion
+        self.image_provider = image_provider
         
         # 日付ベースの出力ディレクトリ
         self.dirs = get_daily_output_dirs()
         
-        # ジェネレーター初期化
-        self.image_gen = FluxImageGenerator()
+        # 画像ジェネレーター初期化（プロバイダー選択）
+        if image_provider == "pollinations":
+            self.image_gen = PollinationsImageGenerator()
+            console.print(f"[cyan]🖼️ 画像生成: Pollinations.ai（無料）[/cyan]")
+        else:
+            self.image_gen = FluxImageGenerator()
+            console.print(f"[cyan]🖼️ 画像生成: Flux via fal.ai（有料）[/cyan]")
+        
         self.narration_gen = EdgeTTSGenerator()  # 無料TTS (Edge TTS)
         self.compositor = NewsGraphicsCompositor(channel_name=channel_name)
         self.bgm_manager = BGMManager()  # BGM管理
