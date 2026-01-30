@@ -289,25 +289,38 @@ class NewsVideoPipeline:
         scenes: list[Scene],
         output_prefix: str,
     ) -> list[Scene]:
-        """各シーンの画像を生成"""
+        """各シーンの画像を生成（image_group で共有）"""
         
         console.print("\n[cyan]🖼️ シーン画像を生成中...[/cyan]")
         
+        # image_group ごとに1枚だけ生成
+        group_images = {}  # image_group番号 -> image_path
+        
         for scene in scenes:
-            output_name = f"{output_prefix}_scene{scene.index + 1}"
+            # image_group があれば使う、なければ scene.index + 1
+            image_group = getattr(scene, 'image_group', None) or (scene.index + 1)
             
-            result = self.image_gen.generate(
-                prompt=scene.image_prompt,
-                output_name=output_name,
-                image_size="portrait_16_9",  # 縦動画用
-                output_dir=self.dirs["images"],
-            )
-            
-            if result.success:
-                scene.image_path = result.file_path
-                console.print(f"  ✅ シーン{scene.index + 1}: {result.file_path}")
+            if image_group in group_images:
+                # 既に生成済みの画像を使う
+                scene.image_path = group_images[image_group]
+                console.print(f"  ✅ シーン{scene.index + 1}: (グループ{image_group}の画像を再利用)")
             else:
-                console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
+                # 新規生成
+                output_name = f"{output_prefix}_group{image_group}"
+                
+                result = self.image_gen.generate(
+                    prompt=scene.image_prompt,
+                    output_name=output_name,
+                    image_size="landscape_16_9",  # 横動画用
+                    output_dir=self.dirs["images"],
+                )
+                
+                if result.success:
+                    scene.image_path = result.file_path
+                    group_images[image_group] = result.file_path
+                    console.print(f"  ✅ シーン{scene.index + 1}: {result.file_path} (グループ{image_group})")
+                else:
+                    console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
         
         return scenes
     
@@ -889,11 +902,13 @@ class NewsVideoPipeline:
                 description=visual_desc,
                 image_prompt=image_prompt,
                 video_prompt=f"Slow cinematic camera movement, {visual_desc}",
-                subtitle=sd.get("narration", "")[:30],  # 字幕は短く
+                subtitle=sd.get("narration", ""),  # 字幕（後でRemotionで全文表示）
             )
             # ナレーションテキストと強調ワードを保持
             scene.narration_text = sd.get("narration", "")
             scene.emphasis_word = sd.get("emphasis_word", "")
+            # image_group を保持（同じグループは同じ画像を使う）
+            scene.image_group = sd.get("image_group", i + 1)
             scenes.append(scene)
             console.print(f"  シーン{i+1}: {visual_desc[:40]}...")
         
@@ -994,31 +1009,10 @@ class NewsVideoPipeline:
         
         console.print(f"  ✅ 合計音声: {total_audio_duration:.1f}秒")
         
-        # 6.5. BGMミックス
-        final_audio = combined_audio
-        if combined_audio:
-            # ナレーションテキストからムードを検出
-            all_narration = " ".join([getattr(s, 'narration_text', '') for s in scenes])
-            mood = self.bgm_manager.detect_mood(headline, all_narration)
-            bgm_track = self.bgm_manager.get_bgm(mood)
-            
-            if bgm_track and bgm_track.exists():
-                console.print(f"\n[cyan]🎵 BGMミックス中... ({mood.value})[/cyan]")
-                mixed_audio = str(self.dirs["audio"] / f"{output_prefix}_mixed.mp3")
-                
-                if self.bgm_manager.mix_audio(
-                    narration_path=combined_audio,
-                    bgm_path=bgm_track.path,
-                    output_path=mixed_audio,
-                    narration_volume=1.0,
-                    bgm_volume=0.18,  # BGMは控えめだが聞こえる程度
-                ):
-                    final_audio = mixed_audio
-                    console.print(f"  ✅ BGM追加: {bgm_track.name}")
-                else:
-                    console.print(f"  ⚠️ BGMミックス失敗、ナレーションのみ使用")
-            else:
-                console.print(f"  ℹ️ BGMなし（{mood.value}用BGM未設定）")
+        # 6.5. ムード検出（BGMミックスは最終合成で行う）
+        all_narration = " ".join([getattr(s, 'narration_text', '') for s in scenes])
+        mood = self.bgm_manager.detect_mood(headline, all_narration)
+        console.print(f"[cyan]🎭 検出ムード: {mood.value}[/cyan]")
         
         # 7. 最終合成（シーンごとに音声長に合わせる）
         # Remotion + 画像生成の場合はオーバーレイをスキップ（Remotion で既に含まれている）
@@ -1026,13 +1020,14 @@ class NewsVideoPipeline:
         
         final_path = self._compose_scene_synced_video(
             scenes=scenes,
-            combined_audio=final_audio,  # BGMミックス済み音声
+            combined_audio=combined_audio,  # ムード検出用（BGMミックスは最終合成で）
             total_audio_duration=total_audio_duration,
             headline=headline,
             sub_headline=sub_headline,
             output_prefix=output_prefix,
             is_breaking=is_breaking,
             skip_overlay=skip_overlay,
+            mood=mood,  # 検出されたムードでBGMミックス
         )
         
         # 動画の長さを取得
@@ -1088,6 +1083,7 @@ class NewsVideoPipeline:
         output_prefix: str,
         is_breaking: bool,
         skip_overlay: bool = False,
+        mood: MoodType = None,
     ) -> str:
         """シーン同期で最終動画を合成
         
@@ -1139,18 +1135,43 @@ class NewsVideoPipeline:
             
             adjusted_path = str(temp_dir / f"adjusted_{i}.mp4")
             
+            # シーン音声を取得
+            scene_audio = getattr(scene, 'audio_path', None)
+            
             if skip_overlay:
                 # オーバーレイなし（Remotion ニュース風の場合は既に含まれている）
-                filter_complex = f"setpts={slowdown}*PTS"
-                subprocess.run([
-                    "ffmpeg", "-y",
-                    "-i", scene.video_path,
-                    "-vf", filter_complex,
-                    "-t", str(target_duration),
-                    "-c:v", "libx264", "-preset", "fast",
-                    "-an",
-                    adjusted_path
-                ], capture_output=True)
+                # 動画が音声より短い場合、最後のフレームを延長して音声に合わせる
+                adjusted_video_duration = actual_duration * slowdown
+                pad_duration = max(0, target_duration - adjusted_video_duration + 0.1)  # 0.1秒余裕
+                filter_complex = f"setpts={slowdown}*PTS,tpad=stop_mode=clone:stop_duration={pad_duration}"
+                
+                if scene_audio and Path(scene_audio).exists():
+                    # 音声を直接埋め込み（シーンごとに同期）
+                    # 音声を44100Hz stereoに統一（concat互換）
+                    # -t で音声の長さに正確に合わせる
+                    subprocess.run([
+                        "ffmpeg", "-y",
+                        "-i", scene.video_path,
+                        "-i", scene_audio,
+                        "-vf", filter_complex,
+                        "-t", str(target_duration),
+                        "-c:v", "libx264", "-preset", "fast",
+                        "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                        "-map", "0:v", "-map", "1:a",
+                        adjusted_path
+                    ], capture_output=True)
+                else:
+                    # 音声なしの場合も無音トラックを追加（concat互換）
+                    subprocess.run([
+                        "ffmpeg", "-y",
+                        "-i", scene.video_path,
+                        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                        "-vf", filter_complex,
+                        "-t", str(target_duration),
+                        "-c:v", "libx264", "-preset", "fast",
+                        "-c:a", "aac", "-b:a", "192k",
+                        adjusted_path
+                    ], capture_output=True)
             else:
                 # オーバーレイ作成（最初のシーンのみヘッドライン表示）
                 overlay_path = str(temp_dir / f"overlay_{i}.png")
@@ -1164,18 +1185,41 @@ class NewsVideoPipeline:
                     style="gradient",
                 )
                 
-                # 動画調整（スロー + オーバーレイ）
-                filter_complex = f"[0:v]setpts={slowdown}*PTS[slowed];[slowed][1:v]overlay=0:0"
-                subprocess.run([
-                    "ffmpeg", "-y",
-                    "-i", scene.video_path,
-                    "-i", overlay_path,
-                    "-filter_complex", filter_complex,
-                    "-t", str(target_duration),
-                    "-c:v", "libx264", "-preset", "fast",
-                    "-an",
-                    adjusted_path
-                ], capture_output=True)
+                # 動画調整（スロー + オーバーレイ + 音声埋め込み）
+                # 動画が音声より短い場合、最後のフレームを延長
+                adjusted_video_duration = actual_duration * slowdown
+                pad_duration = max(0, target_duration - adjusted_video_duration + 0.1)
+                filter_complex = f"[0:v]setpts={slowdown}*PTS,tpad=stop_mode=clone:stop_duration={pad_duration}[slowed];[slowed][1:v]overlay=0:0"
+                
+                if scene_audio and Path(scene_audio).exists():
+                    # 音声を44100Hz stereoに統一（concat互換）
+                    # -t で音声の長さに正確に合わせる
+                    subprocess.run([
+                        "ffmpeg", "-y",
+                        "-i", scene.video_path,
+                        "-i", overlay_path,
+                        "-i", scene_audio,
+                        "-filter_complex", filter_complex,
+                        "-t", str(target_duration),
+                        "-c:v", "libx264", "-preset", "fast",
+                        "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                        "-map", "[slowed]", "-map", "2:a",
+                        adjusted_path
+                    ], capture_output=True)
+                else:
+                    # 音声なしの場合も無音トラックを追加（concat互換）
+                    subprocess.run([
+                        "ffmpeg", "-y",
+                        "-i", scene.video_path,
+                        "-i", overlay_path,
+                        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                        "-filter_complex", filter_complex,
+                        "-t", str(target_duration),
+                        "-c:v", "libx264", "-preset", "fast",
+                        "-c:a", "aac", "-b:a", "192k",
+                        "-map", "[slowed]", "-map", "2:a",
+                        adjusted_path
+                    ], capture_output=True)
             
             adjusted_videos.append(adjusted_path)
             console.print(f"  ✅ シーン{i+1}: {actual_duration:.1f}秒 → {target_duration:.1f}秒 (x{slowdown:.2f})")
@@ -1192,19 +1236,49 @@ class NewsVideoPipeline:
         self.intro_outro_gen.generate_outro_video(outro_path, temp_dir)
         console.print(f"  ✅ アウトロ: 4秒")
         
-        # 動画を結合（イントロ + メイン + アウトロ）
+        # イントロ・アウトロに無音トラックを追加（concat互換性のため）
+        intro_with_audio = str(temp_dir / "intro_audio.mp4")
+        outro_with_audio = str(temp_dir / "outro_audio.mp4")
+        
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", intro_path,
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-shortest",
+            intro_with_audio
+        ], capture_output=True)
+        
+        # アウトロに締めナレーションを追加（あれば）
+        closing_audio_path = str(self.dirs["audio"] / f"{output_prefix}_closing.mp3")
+        if Path(closing_audio_path).exists():
+            # 締めナレーションを44100Hz stereoに統一してアウトロに埋め込み
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", outro_path,
+                "-i", closing_audio_path,
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                "-shortest",
+                outro_with_audio
+            ], capture_output=True)
+        else:
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", outro_path,
+                "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                outro_with_audio
+            ], capture_output=True)
+        
+        # 動画を結合（イントロ + メイン + アウトロ）- 全て音声付き
         console.print("\n[cyan]🎬 全体結合中...[/cyan]")
         concat_list = str(temp_dir / "video_concat.txt")
         with open(concat_list, "w") as f:
-            # イントロ
-            if Path(intro_path).exists():
-                f.write(f"file '{intro_path}'\n")
-            # メインシーン
+            f.write(f"file '{intro_with_audio}'\n")
             for vp in adjusted_videos:
                 f.write(f"file '{vp}'\n")
-            # アウトロ
-            if Path(outro_path).exists():
-                f.write(f"file '{outro_path}'\n")
+            f.write(f"file '{outro_with_audio}'\n")
         
         concat_video = str(temp_dir / f"{output_prefix}_concat.mp4")
         subprocess.run([
@@ -1212,39 +1286,43 @@ class NewsVideoPipeline:
             "-i", concat_list, "-c", "copy", concat_video
         ], capture_output=True)
         
-        # 音声を追加（イントロ分は無音パディング）
         final_path = str(self.dirs["final"] / f"{output_prefix}_final.mp4")
         
-        if combined_audio:
-            # イントロ分の無音(3秒)を音声の前にパディング
-            padded_audio = str(temp_dir / f"{output_prefix}_padded.mp3")
-            pad_result = subprocess.run([
-                "ffmpeg", "-y",
-                "-f", "lavfi", "-t", "3", "-i", "anullsrc=r=44100:cl=stereo",  # 3秒無音
-                "-i", combined_audio,
-                "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[out]",
-                "-map", "[out]",
-                "-c:a", "libmp3lame", "-b:a", "192k",
-                padded_audio
-            ], capture_output=True, text=True)
+        # BGMミックス（combined_audioはBGMミックス済みの場合）
+        if combined_audio and Path(combined_audio).exists():
+            # 動画の音声を抽出
+            video_audio = str(temp_dir / f"{output_prefix}_video_audio.mp3")
+            subprocess.run([
+                "ffmpeg", "-y", "-i", concat_video,
+                "-vn", "-c:a", "libmp3lame", "-b:a", "192k",
+                video_audio
+            ], capture_output=True)
             
-            if pad_result.returncode != 0:
-                console.print(f"[yellow]⚠️ 無音パディング失敗、元の音声を使用[/yellow]")
-                padded_audio = combined_audio
-            
-            # パディング済み音声を動画と合成
-            result = subprocess.run([
-                "ffmpeg", "-y",
-                "-i", concat_video,
-                "-i", padded_audio,
-                "-c:v", "copy",
-                "-c:a", "aac", "-b:a", "192k",
-                "-shortest",
-                final_path
-            ], capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                console.print(f"[red]⚠️ 音声追加エラー: {result.stderr[:200]}[/red]")
+            # BGMとミックス（動画音声を優先）
+            # 検出されたムードを使用、なければ NEUTRAL
+            bgm_mood = mood if mood else MoodType.NEUTRAL
+            bgm_track = self.bgm_manager.get_bgm(bgm_mood)
+            console.print(f"  🎵 BGMミックス中... ({bgm_mood.value})")
+            if bgm_track and Path(bgm_track.path).exists():
+                mixed_audio = str(temp_dir / f"{output_prefix}_final_mixed.mp3")
+                self.bgm_manager.mix_audio(
+                    narration_path=video_audio,
+                    bgm_path=bgm_track.path,
+                    output_path=mixed_audio,
+                    narration_volume=1.0,
+                    bgm_volume=0.15,
+                )
+                # ミックス済み音声を動画に適用
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-i", concat_video,
+                    "-i", mixed_audio,
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                    "-map", "0:v", "-map", "1:a",
+                    final_path
+                ], capture_output=True)
+            else:
+                subprocess.run(["cp", concat_video, final_path])
         else:
             subprocess.run(["cp", concat_video, final_path])
         

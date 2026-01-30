@@ -289,32 +289,35 @@ class NewsVideoAgent:
         if not full_text:
             full_text = article.get("summary", title)
         
-        # 日本語にリライト（4シーン構成）
-        translated = self._translate_to_japanese(title, full_text, num_scenes=4)
-        
-        console.print(f"📝 リライト完了:")
-        console.print(f"  見出し: {translated.get('headline', 'N/A')}")
-        console.print(f"  フック: {translated.get('hook', 'N/A')}")
-        console.print(f"  スタイル: {translated.get('visual_style', 'N/A')}")
-        console.print(f"  シーン数: {len(translated.get('scenes', []))}")
-        
         # パイプライン初期化（遅延）
         if self.pipeline is None:
             self.pipeline = NewsVideoPipeline(
                 channel_name="FJ News 24",
-                num_scenes=4,
+                num_scenes=12,  # 4グループ × 3シーン
                 scene_duration=5.0,
             )
         
-        # 動画生成（シーン構成データを渡す）
+        # パイプラインの generate_scenes_data() を使用（12シーン形式）
+        scenes_data = self.pipeline.generate_scenes_data(
+            article_text=full_text,
+            headline=title,
+            num_scenes=12,
+        )
+        
+        console.print(f"📝 シーン構成完了:")
+        console.print(f"  見出し: {scenes_data.get('headline', 'N/A')}")
+        console.print(f"  ムード: {scenes_data.get('mood', 'N/A')}")
+        console.print(f"  シーン数: {len(scenes_data.get('scenes', []))}")
+        
+        # 動画生成（12シーン形式）
         result = self.pipeline.run(
-            headline=translated["headline"],
-            sub_headline=translated.get("sub_headline", ""),
-            scenes_data=translated.get("scenes", []),
-            closing_text=translated.get("closing", ""),
-            hook=translated.get("hook", ""),
-            keywords=translated.get("keywords", []),
-            visual_style=translated.get("visual_style", ""),
+            headline=scenes_data["headline"],
+            sub_headline=scenes_data.get("sub_headline", ""),
+            scenes_data=scenes_data.get("scenes", []),
+            closing_text=scenes_data.get("closing_text", ""),
+            hook="",  # generate_scenes_data では hook は scenes に含まれる
+            keywords=[],
+            visual_style="",
             is_breaking=True,
         )
         
@@ -343,25 +346,35 @@ class NewsVideoAgent:
         # タイトル抽出を試みる
         title = url.split("/")[-1].replace("-", " ")[:50]
         
-        translated = self._translate_to_japanese(title, full_text)
-        
-        console.print(f"📝 リライト完了:")
-        console.print(f"  見出し: {translated.get('headline', 'N/A')}")
-        console.print(f"  フック: {translated.get('hook', 'N/A')}")
-        console.print(f"  スタイル: {translated.get('visual_style', 'N/A')}")
-        console.print(f"  シーン数: {len(translated.get('scenes', []))}")
-        
+        # パイプライン初期化（遅延）
         if self.pipeline is None:
-            self.pipeline = NewsVideoPipeline()
+            self.pipeline = NewsVideoPipeline(
+                channel_name="FJ News 24",
+                num_scenes=12,  # 4グループ × 3シーン
+                scene_duration=5.0,
+            )
         
+        # パイプラインの generate_scenes_data() を使用（12シーン形式）
+        scenes_data = self.pipeline.generate_scenes_data(
+            article_text=full_text,
+            headline=title,
+            num_scenes=12,
+        )
+        
+        console.print(f"📝 シーン構成完了:")
+        console.print(f"  見出し: {scenes_data.get('headline', 'N/A')}")
+        console.print(f"  ムード: {scenes_data.get('mood', 'N/A')}")
+        console.print(f"  シーン数: {len(scenes_data.get('scenes', []))}")
+        
+        # 動画生成（12シーン形式）
         result = self.pipeline.run(
-            headline=translated["headline"],
-            sub_headline=translated.get("sub_headline", ""),
-            scenes_data=translated.get("scenes", []),
-            closing_text=translated.get("closing", ""),
-            hook=translated.get("hook", ""),
-            keywords=translated.get("keywords", []),
-            visual_style=translated.get("visual_style", ""),
+            headline=scenes_data["headline"],
+            sub_headline=scenes_data.get("sub_headline", ""),
+            scenes_data=scenes_data.get("scenes", []),
+            closing_text=scenes_data.get("closing_text", ""),
+            hook="",
+            keywords=[],
+            visual_style="",
         )
         
         if result.success:
