@@ -165,12 +165,12 @@ class NewsVideoPipeline:
 - グループ3（展開）: 事態が動く。驚きの展開や転換点
 - グループ4（種明かし）: 答え合わせ。感動や驚きの結末
 
-# ⏱️ シーンの長さ（重要！）
-各シーンの narration の文字数で長さをコントロール:
-- 導入（グループ1）: **短くテンポよく**（各15-25文字）→ 3-4秒
-- 展開（グループ2,3）: **じっくり**（各30-50文字）→ 5-7秒  
-- クライマックス: **最も長く**（40-60文字）→ 7-8秒
-- 衝撃の後: **短い間**（10-15文字）→ 2-3秒の「間」を作る
+# ⏱️ ナレーションの長さ（重要！）
+**全シーン30-60文字**のしっかりしたナレーションで、話の流れが分かるように:
+- 導入でも省略しすぎない。状況をちゃんと説明する
+- 展開では詳細を伝える。「誰が」「何を」「どうした」を明確に
+- クライマックスは感情を込めて、印象に残るように
+- 記事の重要な情報を漏らさず伝える
 
 # 🎭 今回使う心理学テクニック
 {selected_technique}
@@ -190,24 +190,24 @@ class NewsVideoPipeline:
   "hook": "疑問形のフック（視聴者への問いかけ）",
   "mood": "emotional|funny|dramatic|informative",
   "scenes": [
-    {{"image_group": 1, "visual_description": "グループ1の画像説明（英語、{selected_visual}を意識）", "narration": "短めのナレーション（謎の提示）", "pace": "fast"}},
-    {{"image_group": 1, "visual_description": "（同上）", "narration": "...", "pace": "fast"}},
-    {{"image_group": 1, "visual_description": "（同上）", "narration": "...", "pace": "fast"}},
-    {{"image_group": 2, "visual_description": "グループ2の画像説明（英語）", "narration": "背景説明（手がかり）", "pace": "normal"}},
-    {{"image_group": 2, "visual_description": "（同上）", "narration": "...", "pace": "normal"}},
-    {{"image_group": 2, "visual_description": "（同上）", "narration": "...", "pace": "normal"}},
-    {{"image_group": 3, "visual_description": "グループ3の画像説明（英語）", "narration": "驚きの展開", "pace": "slow"}},
-    {{"image_group": 3, "visual_description": "（同上）", "narration": "クライマックス（長め）", "pace": "slow"}},
-    {{"image_group": 3, "visual_description": "（同上）", "narration": "...", "pace": "pause"}},
-    {{"image_group": 4, "visual_description": "グループ4の画像説明（英語）", "narration": "種明かし・結末", "pace": "normal"}},
-    {{"image_group": 4, "visual_description": "（同上）", "narration": "...", "pace": "normal"}},
-    {{"image_group": 4, "visual_description": "（同上）", "narration": "締めの一言", "pace": "slow"}}
+    {{"image_group": 1, "visual_description": "グループ1の画像説明（英語、{selected_visual}を意識）", "narration": "謎の提示・フック（30-50文字）"}},
+    {{"image_group": 1, "visual_description": "（同上）", "narration": "状況説明（30-50文字）"}},
+    {{"image_group": 1, "visual_description": "（同上）", "narration": "背景・導入の締め（30-50文字）"}},
+    {{"image_group": 2, "visual_description": "グループ2の画像説明（英語）", "narration": "詳細な展開1（30-60文字）"}},
+    {{"image_group": 2, "visual_description": "（同上）", "narration": "詳細な展開2（30-60文字）"}},
+    {{"image_group": 2, "visual_description": "（同上）", "narration": "詳細な展開3（30-60文字）"}},
+    {{"image_group": 3, "visual_description": "グループ3の画像説明（英語）", "narration": "クライマックス前（30-60文字）"}},
+    {{"image_group": 3, "visual_description": "（同上）", "narration": "クライマックス（40-60文字、感情込めて）"}},
+    {{"image_group": 3, "visual_description": "（同上）", "narration": "クライマックス後（30-50文字）"}},
+    {{"image_group": 4, "visual_description": "グループ4の画像説明（英語）", "narration": "種明かし・解決（30-60文字）"}},
+    {{"image_group": 4, "visual_description": "（同上）", "narration": "後日談・現在（30-50文字）"}},
+    {{"image_group": 4, "visual_description": "（同上）", "narration": "印象的な締め（30-50文字）"}}
   ],
   "closing_text": "印象に残る締め（20文字程度）"
 }}
 ```
 
-**必ず12シーン（4グループ × 3シーン）で生成。ナレーションの長さでテンポをコントロール！**"""
+**必ず12シーン（4グループ × 3シーン）で生成。各ナレーションは30-60文字でしっかり内容を伝える！**"""
 
         console.print(f"\n[cyan]📝 シーン構成を生成中（{num_scenes}シーン）...[/cyan]")
         
