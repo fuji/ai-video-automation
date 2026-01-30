@@ -179,31 +179,68 @@ class NewsVideoPipeline:
 
         console.print(f"\n[cyan]📝 シーン構成を生成中（{num_scenes}シーン）...[/cyan]")
         
-        response = self.gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
+        # リトライロジック（最大3回）
+        max_retries = 3
+        last_error = None
         
-        # JSONを抽出
-        content = response.text
-        json_start = content.find("{")
-        json_end = content.rfind("}") + 1
-        json_str = content[json_start:json_end]
-        
-        try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            console.print(f"[yellow]⚠️ JSON パースエラー、修正を試みます...[/yellow]")
-            import re
-            # 余分なカンマを削除、改行を整理
-            json_str = re.sub(r',\s*}', '}', json_str)
-            json_str = re.sub(r',\s*]', ']', json_str)
+        for attempt in range(max_retries):
             try:
-                data = json.loads(json_str)
-            except json.JSONDecodeError:
-                console.print(f"[red]❌ JSON パース失敗[/red]")
-                console.print(f"[dim]{content[:800]}...[/dim]")
-                raise
+                if attempt > 0:
+                    console.print(f"[yellow]⏳ リトライ {attempt + 1}/{max_retries}（10秒待機）...[/yellow]")
+                    import time
+                    time.sleep(10)
+                
+                response = self.gemini_client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                )
+                
+                # JSONを抽出
+                content = response.text
+                json_start = content.find("{")
+                json_end = content.rfind("}") + 1
+                
+                if json_start == -1 or json_end == 0:
+                    raise ValueError("JSON not found in response")
+                
+                json_str = content[json_start:json_end]
+                
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    console.print(f"[yellow]⚠️ JSON パースエラー、修正を試みます...[/yellow]")
+                    import re
+                    # 余分なカンマを削除、改行を整理
+                    json_str = re.sub(r',\s*}', '}', json_str)
+                    json_str = re.sub(r',\s*]', ']', json_str)
+                    # 不完全なJSONを補完
+                    if json_str.count('[') > json_str.count(']'):
+                        json_str += ']' * (json_str.count('[') - json_str.count(']'))
+                    if json_str.count('{') > json_str.count('}'):
+                        json_str += '}' * (json_str.count('{') - json_str.count('}'))
+                    data = json.loads(json_str)
+                
+                # シーン数チェック
+                scenes = data.get('scenes', [])
+                if len(scenes) < 6:
+                    raise ValueError(f"シーン数不足: {len(scenes)} < 6")
+                
+                # 成功！
+                break
+                
+            except Exception as e:
+                last_error = e
+                error_msg = str(e)
+                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    console.print(f"[yellow]⚠️ Gemini API レート制限、待機中...[/yellow]")
+                elif "JSONDecodeError" in str(type(e)):
+                    console.print(f"[yellow]⚠️ JSON パース失敗、リトライします...[/yellow]")
+                else:
+                    console.print(f"[yellow]⚠️ エラー: {error_msg[:100]}[/yellow]")
+                
+                if attempt == max_retries - 1:
+                    console.print(f"[red]❌ {max_retries}回リトライしても失敗[/red]")
+                    raise last_error
         
         console.print(f"  ✅ {len(data.get('scenes', []))}シーン生成")
         console.print(f"  📰 {data.get('headline', headline)}")
