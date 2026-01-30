@@ -2,10 +2,10 @@
 
 from .content_planner import ContentPlanner, VideoProject, Scene, create_sample_project
 from .image_generator import ImageGenerator, FluxImageGenerator
-from .video_generator import VideoGenerator
+# video_generator.py (Kling) は削除済み - Veo を使用
 from .edge_tts_generator import EdgeTTSGenerator, EdgeTTSConfig, NarrationResult
 from .news_explainer import NewsExplainer, NewsExplanation
-from .news_rewriter import NewsRewriter, RewriteResult
+# news_rewriter.py は削除済み - news_agent._translate_to_japanese() に統合
 from .news_content_planner import NewsContentPlanner, NewsVideoProject, NewsScene
 from .veo_video_generator import VeoVideoGenerator, VeoVideoResult
 
@@ -16,14 +16,11 @@ __all__ = [
     "create_sample_project",
     "ImageGenerator",
     "FluxImageGenerator",
-    "VideoGenerator",
     "EdgeTTSGenerator",
     "EdgeTTSConfig",
     "NarrationResult",
     "NewsExplainer",
     "NewsExplanation",
-    "NewsRewriter",
-    "RewriteResult",
     "NewsContentPlanner",
     "NewsVideoProject",
     "NewsScene",

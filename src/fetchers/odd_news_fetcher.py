@@ -2,6 +2,7 @@
 海外おもしろニュース取得モジュール
 
 UPI Odd News などから面白いニュースを取得してスコアリング
+記事本文の抽出は NewsScraper に委譲
 """
 
 import feedparser
@@ -12,8 +13,9 @@ from datetime import datetime
 import re
 import json
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # RSS summary のHTMLストリップ用
 from rich.console import Console
+from ..utils.news_scraper import NewsScraper
 
 console = Console()
 
@@ -86,6 +88,7 @@ class OddNewsFetcher:
             },
             follow_redirects=True,
         )
+        self.scraper = NewsScraper()  # 記事抽出用
     
     def fetch_rss(self, feed_url: str, source_name: str) -> list[NewsArticle]:
         """RSSフィードから記事を取得"""
@@ -144,21 +147,24 @@ class OddNewsFetcher:
         return score
     
     def fetch_full_article(self, url: str) -> Optional[str]:
-        """記事本文を取得"""
+        """記事本文を取得（NewsScraper に委譲）"""
         try:
-            response = self.client.get(url)
-            soup = BeautifulSoup(response.text, 'html.parser')
+            scraped = self.scraper.scrape(url)
+            if scraped.text and len(scraped.text) > 100:
+                console.print(f"[green]✅ 記事取得成功: {scraped.word_count}文字[/green]")
+                return scraped.text[:3000]  # 最大3000文字
             
-            # UPI の記事本文を取得
-            article_body = soup.find('article') or soup.find('div', class_='article-body')
-            
-            if article_body:
-                paragraphs = article_body.find_all('p')
-                text = '\n'.join([p.get_text() for p in paragraphs])
-                return text[:2000]  # 最大2000文字
-            
+            console.print("[red]記事本文が見つかりませんでした[/red]")
             return None
             
+        except Exception as e:
+            console.print(f"[red]記事取得エラー: {e}[/red]")
+            return None
+    
+    def fetch_full_article_rich(self, url: str):
+        """記事をリッチな形式で取得（ScrapedArticle を返す）"""
+        try:
+            return self.scraper.scrape(url)
         except Exception as e:
             console.print(f"[red]記事取得エラー: {e}[/red]")
             return None

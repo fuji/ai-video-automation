@@ -89,7 +89,8 @@ class NewsScraper:
 
     def _scrape_with_newspaper(self, url: str) -> ScrapedArticle:
         """newspaper3kでスクレイピング"""
-        article = Article(url, language="ja")
+        # 言語を指定しない（自動検出に任せる）
+        article = Article(url)
         article.download()
         article.parse()
 
