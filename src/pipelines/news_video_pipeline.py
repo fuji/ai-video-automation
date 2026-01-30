@@ -41,6 +41,7 @@ class Scene:
     subtitle: str  # このシーンの字幕
     image_path: Optional[str] = None
     video_path: Optional[str] = None
+    image_group: Optional[int] = None  # 画像グループ番号（1-4）
 
 
 @dataclass
@@ -315,6 +316,7 @@ class NewsVideoPipeline:
                 image_prompt=scene_data["image_prompt"],
                 video_prompt=scene_data["video_prompt"],
                 subtitle=scene_data["subtitle"],
+                image_group=scene_data.get("image_group"),  # 画像グループ番号
             )
             scenes.append(scene)
             console.print(f"  シーン{i+1}: {scene.description}")
@@ -945,7 +947,8 @@ class NewsVideoPipeline:
             scene.narration_text = sd.get("narration", "")
             scene.emphasis_word = sd.get("emphasis_word", "")
             # image_group を保持（同じグループは同じ画像を使う）
-            scene.image_group = sd.get("image_group", i + 1)
+            # フォールバック: 3シーンごとに1グループ (0-2 → 1, 3-5 → 2, etc.)
+            scene.image_group = sd.get("image_group", (i // 3) + 1)
             scenes.append(scene)
             console.print(f"  シーン{i+1}: {visual_desc[:40]}...")
         
