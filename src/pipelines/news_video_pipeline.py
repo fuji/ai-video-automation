@@ -65,12 +65,14 @@ class NewsVideoPipeline:
         scene_duration: float = 5.0,
         use_remotion: bool = True,  # Remotion を使う（無料）か Luma を使う（有料）
         image_provider: str = "pollinations",  # "pollinations" (無料) or "flux" (有料)
+        discord_webhook_url: Optional[str] = None,  # Discord通知用Webhook URL
     ):
         self.channel_name = channel_name
         self.num_scenes = num_scenes
         self.scene_duration = scene_duration
         self.use_remotion = use_remotion
         self.image_provider = image_provider
+        self.discord_webhook_url = discord_webhook_url or os.environ.get("DISCORD_WEBHOOK_URL")
         
         # 日付ベースの出力ディレクトリ
         self.dirs = get_daily_output_dirs()
@@ -1107,6 +1109,9 @@ class NewsVideoPipeline:
         )
         duration = float(probe.stdout.strip()) if probe.stdout.strip() else total_audio_duration
         
+        # Discord通知
+        self._send_discord_notification(final_path, headline, duration)
+        
         return NewsVideoResult(
             success=True,
             video_path=final_path,
@@ -1114,6 +1119,40 @@ class NewsVideoPipeline:
             audio_path=combined_audio,
             duration_seconds=duration,
         )
+    
+    def _send_discord_notification(self, video_path: str, headline: str, duration: float) -> None:
+        """Discord Webhookで完成通知を送信"""
+        if not self.discord_webhook_url:
+            return
+        
+        try:
+            import requests
+            
+            # ファイルサイズを取得
+            file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
+            
+            message = {
+                "embeds": [{
+                    "title": "🎬 動画生成完了！",
+                    "description": f"**{headline}**",
+                    "color": 0x00ff00,  # 緑
+                    "fields": [
+                        {"name": "📁 ファイル", "value": f"`{os.path.basename(video_path)}`", "inline": True},
+                        {"name": "⏱️ 長さ", "value": f"{duration:.1f}秒", "inline": True},
+                        {"name": "📦 サイズ", "value": f"{file_size:.1f}MB", "inline": True},
+                        {"name": "📍 パス", "value": f"`{video_path}`", "inline": False},
+                    ],
+                    "footer": {"text": f"FJ News 24 • {self.channel_name}"}
+                }]
+            }
+            
+            response = requests.post(self.discord_webhook_url, json=message, timeout=10)
+            if response.status_code == 204:
+                console.print("[green]📢 Discord通知送信完了[/green]")
+            else:
+                console.print(f"[yellow]⚠️ Discord通知失敗: {response.status_code}[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Discord通知エラー: {e}[/yellow]")
     
     def _create_image_prompt(self, visual_desc: str, headline: str, visual_style: str = "") -> str:
         """visual_descriptionから画像プロンプトを生成（スタイル統一）"""
