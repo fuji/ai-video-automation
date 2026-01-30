@@ -160,10 +160,10 @@ class NewsVideoPipeline:
 - 「物乞いが実は億万長者だったら？」
 
 # 🔍 ミステリー型構成（謎→手がかり→種明かし）
-- グループ1（謎の提示）: 衝撃的な事実や疑問を投げかける。「なぜ？」「どうやって？」を視聴者に思わせる
-- グループ2（手がかり）: 背景や状況を説明。でも核心はまだ明かさない
-- グループ3（展開）: 事態が動く。驚きの展開や転換点
-- グループ4（種明かし）: 答え合わせ。感動や驚きの結末
+- シーン1-3（謎の提示）: 衝撃的な事実や疑問を投げかける。「なぜ？」「どうやって？」を視聴者に思わせる
+- シーン4-6（手がかり）: 背景や状況を説明。でも核心はまだ明かさない
+- シーン7-9（展開）: 事態が動く。驚きの展開や転換点
+- シーン10-12（種明かし）: 答え合わせ。感動や驚きの結末
 
 # ⏱️ ナレーションの長さ（重要！）
 **全シーン30-60文字**のしっかりしたナレーションで、話の流れが分かるように:
@@ -182,6 +182,13 @@ class NewsVideoPipeline:
 ❌ 猫が250km歩いて帰還しました。（説明的でつまらない）
 ✅ グーグルマップなし、スマホなし、250km。猫のナビ、最強すぎない？（ツッコミ + 疑問形）
 
+# 🖼️ 画像の指示（超重要！）
+**各シーンに固有の visual_description を書く**（英語で）
+- 12シーン全て異なる画像を生成する
+- ナレーションの内容に合った具体的なシーンを描写
+- {selected_visual} のスタイルを意識
+- 「同上」や省略は禁止！必ず具体的に書く
+
 # 出力形式 (JSON)
 ```json
 {{
@@ -190,24 +197,24 @@ class NewsVideoPipeline:
   "hook": "疑問形のフック（視聴者への問いかけ）",
   "mood": "emotional|funny|dramatic|informative",
   "scenes": [
-    {{"image_group": 1, "visual_description": "グループ1の画像説明（英語、{selected_visual}を意識）", "narration": "謎の提示・フック（30-50文字）"}},
-    {{"image_group": 1, "visual_description": "（同上）", "narration": "状況説明（30-50文字）"}},
-    {{"image_group": 1, "visual_description": "（同上）", "narration": "背景・導入の締め（30-50文字）"}},
-    {{"image_group": 2, "visual_description": "グループ2の画像説明（英語）", "narration": "詳細な展開1（30-60文字）"}},
-    {{"image_group": 2, "visual_description": "（同上）", "narration": "詳細な展開2（30-60文字）"}},
-    {{"image_group": 2, "visual_description": "（同上）", "narration": "詳細な展開3（30-60文字）"}},
-    {{"image_group": 3, "visual_description": "グループ3の画像説明（英語）", "narration": "クライマックス前（30-60文字）"}},
-    {{"image_group": 3, "visual_description": "（同上）", "narration": "クライマックス（40-60文字、感情込めて）"}},
-    {{"image_group": 3, "visual_description": "（同上）", "narration": "クライマックス後（30-50文字）"}},
-    {{"image_group": 4, "visual_description": "グループ4の画像説明（英語）", "narration": "種明かし・解決（30-60文字）"}},
-    {{"image_group": 4, "visual_description": "（同上）", "narration": "後日談・現在（30-50文字）"}},
-    {{"image_group": 4, "visual_description": "（同上）", "narration": "印象的な締め（30-50文字）"}}
+    {{"visual_description": "シーン1の具体的な画像説明（英語）", "narration": "謎の提示・フック（30-50文字）"}},
+    {{"visual_description": "シーン2の具体的な画像説明（英語）", "narration": "状況説明（30-50文字）"}},
+    {{"visual_description": "シーン3の具体的な画像説明（英語）", "narration": "背景・導入の締め（30-50文字）"}},
+    {{"visual_description": "シーン4の具体的な画像説明（英語）", "narration": "詳細な展開1（30-60文字）"}},
+    {{"visual_description": "シーン5の具体的な画像説明（英語）", "narration": "詳細な展開2（30-60文字）"}},
+    {{"visual_description": "シーン6の具体的な画像説明（英語）", "narration": "詳細な展開3（30-60文字）"}},
+    {{"visual_description": "シーン7の具体的な画像説明（英語）", "narration": "クライマックス前（30-60文字）"}},
+    {{"visual_description": "シーン8の具体的な画像説明（英語）", "narration": "クライマックス（40-60文字、感情込めて）"}},
+    {{"visual_description": "シーン9の具体的な画像説明（英語）", "narration": "クライマックス後（30-50文字）"}},
+    {{"visual_description": "シーン10の具体的な画像説明（英語）", "narration": "種明かし・解決（30-60文字）"}},
+    {{"visual_description": "シーン11の具体的な画像説明（英語）", "narration": "後日談・現在（30-50文字）"}},
+    {{"visual_description": "シーン12の具体的な画像説明（英語）", "narration": "印象的な締め（30-50文字）"}}
   ],
   "closing_text": "印象に残る締め（20文字程度）"
 }}
 ```
 
-**必ず12シーン（4グループ × 3シーン）で生成。各ナレーションは30-60文字でしっかり内容を伝える！**"""
+**必ず12シーン生成。各シーンに固有の visual_description（英語）とナレーション（30-60文字）を書く！**"""
 
         console.print(f"\n[cyan]📝 シーン構成を生成中（{num_scenes}シーン）...[/cyan]")
         
@@ -359,38 +366,26 @@ class NewsVideoPipeline:
         scenes: list[Scene],
         output_prefix: str,
     ) -> list[Scene]:
-        """各シーンの画像を生成（image_group で共有）"""
+        """各シーンの画像を生成（1シーン1画像）"""
         
-        console.print("\n[cyan]🖼️ シーン画像を生成中...[/cyan]")
-        
-        # image_group ごとに1枚だけ生成
-        group_images = {}  # image_group番号 -> image_path
+        console.print("\n[cyan]🖼️ シーン画像を生成中（12枚）...[/cyan]")
         
         for scene in scenes:
-            # image_group があれば使う、なければ 3シーンごとに1グループ
-            image_group = getattr(scene, 'image_group', None) or ((scene.index // 3) + 1)
+            # 各シーンに固有の画像を生成
+            output_name = f"{output_prefix}_scene{scene.index + 1}"
             
-            if image_group in group_images:
-                # 既に生成済みの画像を使う
-                scene.image_path = group_images[image_group]
-                console.print(f"  ✅ シーン{scene.index + 1}: (グループ{image_group}の画像を再利用)")
+            result = self.image_gen.generate(
+                prompt=scene.image_prompt,
+                output_name=output_name,
+                image_size="landscape_16_9",  # 横動画用
+                output_dir=self.dirs["images"],
+            )
+            
+            if result.success:
+                scene.image_path = result.file_path
+                console.print(f"  ✅ シーン{scene.index + 1}: {result.file_path}")
             else:
-                # 新規生成
-                output_name = f"{output_prefix}_group{image_group}"
-                
-                result = self.image_gen.generate(
-                    prompt=scene.image_prompt,
-                    output_name=output_name,
-                    image_size="landscape_16_9",  # 横動画用
-                    output_dir=self.dirs["images"],
-                )
-                
-                if result.success:
-                    scene.image_path = result.file_path
-                    group_images[image_group] = result.file_path
-                    console.print(f"  ✅ シーン{scene.index + 1}: {result.file_path} (グループ{image_group})")
-                else:
-                    console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
+                console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
         
         return scenes
     
@@ -468,10 +463,10 @@ class NewsVideoPipeline:
             narration_text = getattr(scene, 'narration_text', scene.subtitle) or scene.description
             anim_start, anim_end = scene_anim.get(scene.index, (0.0, 1.0))
             
-            # 画像グループ番号を取得（同じ画像 = 同じアニメーションパターン）
+            # シーン番号を取得（各シーン固有の画像）
             img = getattr(scene, 'image_path', None)
-            default_group = (scene.index // 3) + 1  # 3シーンごとに1グループ
-            group_num = image_group_numbers.get(img, default_group) if img else default_group
+            scene_num = scene.index + 1  # 1-based
+            group_num = image_group_numbers.get(img, scene_num) if img else scene_num
             
             # 背景画像があればニュース風、なければモーショングラフィックス
             if scene.image_path and news_style:
@@ -978,9 +973,7 @@ class NewsVideoPipeline:
             # ナレーションテキストと強調ワードを保持
             scene.narration_text = sd.get("narration", "")
             scene.emphasis_word = sd.get("emphasis_word", "")
-            # image_group を保持（同じグループは同じ画像を使う）
-            # フォールバック: 3シーンごとに1グループ (0-2 → 1, 3-5 → 2, etc.)
-            scene.image_group = sd.get("image_group", (i // 3) + 1)
+            # 各シーンに固有の画像（image_group は廃止）
             scenes.append(scene)
             console.print(f"  シーン{i+1}: {visual_desc[:40]}...")
         
