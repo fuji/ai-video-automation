@@ -213,7 +213,12 @@ class PollinationsImageGenerator:
         self.model = "flux"  # flux, flux-realism, flux-anime など
         self.default_width = 1920
         self.default_height = 1080
-        logger.info(f"PollinationsImageGenerator initialized (model: {self.model})")
+        # API キーを環境変数から取得（レート制限回避）
+        self.api_key = os.environ.get("POLLINATIONS_API_KEY")
+        if self.api_key:
+            logger.info(f"PollinationsImageGenerator initialized (model: {self.model}, API key: enabled)")
+        else:
+            logger.info(f"PollinationsImageGenerator initialized (model: {self.model}, API key: none - rate limited)")
 
     def generate(
         self,
@@ -274,6 +279,9 @@ class PollinationsImageGenerator:
                     f"&nologo=true"
                     f"&seed={int(time.time()) + attempt}"  # リトライ時に違う結果
                 )
+                # API キーがあれば追加（レート制限回避）
+                if self.api_key:
+                    url += f"&key={self.api_key}"
 
                 logger.debug(f"Pollinations URL: {url[:100]}...")
 

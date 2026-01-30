@@ -365,13 +365,15 @@ class NewsVideoPipeline:
         self,
         scenes: list[Scene],
         output_prefix: str,
-        max_workers: int = 4,  # 並列数
+        max_workers: int = 2,  # 並列数（Pollinationsのレート制限対策で2に）
+        delay_between_batches: float = 3.0,  # バッチ間の待機秒数
     ) -> list[Scene]:
-        """各シーンの画像を並列生成（1シーン1画像）"""
+        """各シーンの画像をバッチ並列生成（レート制限対策）"""
         
+        import time
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        console.print(f"\n[cyan]🖼️ シーン画像を並列生成中（{len(scenes)}枚, {max_workers}並列）...[/cyan]")
+        console.print(f"\n[cyan]🖼️ シーン画像を生成中（{len(scenes)}枚, {max_workers}並列, {delay_between_batches}秒間隔）...[/cyan]")
         
         def generate_one(scene: Scene) -> tuple[int, str | None, str | None]:
             """1シーンの画像を生成"""
@@ -387,17 +389,29 @@ class NewsVideoPipeline:
             else:
                 return (scene.index, None, result.error_message)
         
-        # 並列実行
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(generate_one, scene): scene for scene in scenes}
+        # バッチに分割して実行（レート制限対策）
+        for batch_start in range(0, len(scenes), max_workers):
+            batch = scenes[batch_start:batch_start + max_workers]
+            batch_num = batch_start // max_workers + 1
+            total_batches = (len(scenes) + max_workers - 1) // max_workers
             
-            for future in as_completed(futures):
-                idx, path, error = future.result()
-                if path:
-                    scenes[idx].image_path = path
-                    console.print(f"  ✅ シーン{idx + 1}: {path}")
-                else:
-                    console.print(f"  ❌ シーン{idx + 1}: {error}")
+            console.print(f"  📦 バッチ {batch_num}/{total_batches}...")
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(generate_one, scene): scene for scene in batch}
+                
+                for future in as_completed(futures):
+                    idx, path, error = future.result()
+                    if path:
+                        scenes[idx].image_path = path
+                        console.print(f"  ✅ シーン{idx + 1}: {path}")
+                    else:
+                        console.print(f"  ❌ シーン{idx + 1}: {error}")
+            
+            # 次のバッチまで待機（最後のバッチ以外）
+            if batch_start + max_workers < len(scenes):
+                console.print(f"  ⏳ レート制限対策: {delay_between_batches}秒待機...")
+                time.sleep(delay_between_batches)
         
         return scenes
     
