@@ -365,27 +365,39 @@ class NewsVideoPipeline:
         self,
         scenes: list[Scene],
         output_prefix: str,
+        max_workers: int = 4,  # 並列数
     ) -> list[Scene]:
-        """各シーンの画像を生成（1シーン1画像）"""
+        """各シーンの画像を並列生成（1シーン1画像）"""
         
-        console.print("\n[cyan]🖼️ シーン画像を生成中（12枚）...[/cyan]")
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        for scene in scenes:
-            # 各シーンに固有の画像を生成
+        console.print(f"\n[cyan]🖼️ シーン画像を並列生成中（{len(scenes)}枚, {max_workers}並列）...[/cyan]")
+        
+        def generate_one(scene: Scene) -> tuple[int, str | None, str | None]:
+            """1シーンの画像を生成"""
             output_name = f"{output_prefix}_scene{scene.index + 1}"
-            
             result = self.image_gen.generate(
                 prompt=scene.image_prompt,
                 output_name=output_name,
-                image_size="landscape_16_9",  # 横動画用
+                image_size="landscape_16_9",
                 output_dir=self.dirs["images"],
             )
-            
             if result.success:
-                scene.image_path = result.file_path
-                console.print(f"  ✅ シーン{scene.index + 1}: {result.file_path}")
+                return (scene.index, result.file_path, None)
             else:
-                console.print(f"  ❌ シーン{scene.index + 1}: {result.error_message}")
+                return (scene.index, None, result.error_message)
+        
+        # 並列実行
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(generate_one, scene): scene for scene in scenes}
+            
+            for future in as_completed(futures):
+                idx, path, error = future.result()
+                if path:
+                    scenes[idx].image_path = path
+                    console.print(f"  ✅ シーン{idx + 1}: {path}")
+                else:
+                    console.print(f"  ❌ シーン{idx + 1}: {error}")
         
         return scenes
     
