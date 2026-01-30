@@ -1,6 +1,7 @@
 """Edge TTS ナレーション生成モジュール - 完全無料の音声合成"""
 
 import asyncio
+import subprocess
 import time
 from pathlib import Path
 from dataclasses import dataclass
@@ -46,6 +47,22 @@ class EdgeTTSGenerator:
         self.audio_dir.mkdir(parents=True, exist_ok=True)
         logger.info("EdgeTTSGenerator initialized (free, unlimited)")
 
+    def _get_audio_duration(self, file_path: str) -> float:
+        """ffprobeで実際の音声長を取得"""
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", file_path],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return float(result.stdout.strip())
+        except Exception as e:
+            logger.warning(f"ffprobe failed: {e}")
+        # フォールバック: 文字数から推定
+        return 0.0
+
     async def _generate_async(
         self,
         text: str,
@@ -68,15 +85,19 @@ class EdgeTTSGenerator:
             
             await communicate.save(output_path)
             
-            # 音声の長さを推定（日本語: 約5文字/秒）
-            estimated_duration = len(text) / 5
+            # ffprobeで実際の音声長を取得（推定値ではなく）
+            actual_duration = self._get_audio_duration(output_path)
+            if actual_duration <= 0:
+                # フォールバック: 文字数から推定
+                actual_duration = len(text) / 5
+                logger.warning(f"Using estimated duration: {actual_duration:.1f}s")
             
-            logger.info(f"Edge TTS generated: {output_path} (~{estimated_duration:.1f}s)")
+            logger.info(f"Edge TTS generated: {output_path} (~{actual_duration:.1f}s)")
             
             return NarrationResult(
                 success=True,
                 file_path=output_path,
-                duration_seconds=estimated_duration,
+                duration_seconds=actual_duration,
                 character_count=len(text),
             )
             
