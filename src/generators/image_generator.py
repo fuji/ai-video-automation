@@ -207,7 +207,8 @@ class FluxImageGenerator:
 class PollinationsImageGenerator:
     """Pollinations.ai を使用した無料画像生成"""
 
-    BASE_URL = "https://image.pollinations.ai/prompt"
+    # gen.pollinations.ai が認証対応の新エンドポイント
+    BASE_URL = "https://gen.pollinations.ai/image"
 
     def __init__(self):
         self.model = "flux"  # flux, flux-realism, flux-anime など
@@ -279,23 +280,47 @@ class PollinationsImageGenerator:
                     f"&nologo=true"
                     f"&seed={int(time.time()) + attempt}"  # リトライ時に違う結果
                 )
-                # API キーがあれば追加（レート制限回避）
+                
+                # ヘッダー構築（API キーがあれば Authorization 追加）
+                headers = {}
                 if self.api_key:
-                    url += f"&key={self.api_key}"
+                    headers["Authorization"] = f"Bearer {self.api_key}"
 
                 logger.debug(f"Pollinations URL: {url[:100]}...")
 
                 # 画像をダウンロード
                 with httpx.Client(timeout=120, follow_redirects=True) as client:
-                    response = client.get(url)
+                    response = client.get(url, headers=headers)
 
                     if response.status_code == 200:
+                        # 画像を開く
+                        image = Image.open(io.BytesIO(response.content))
+                        
+                        # レート制限画像の検出
+                        # Pollinations は 1920x1080 を返さない（最大 1280x768 程度）
+                        # レート制限画像は特定サイズ（例: 1024x1024, 512x512）
+                        actual_w, actual_h = image.size
+                        min_width = min(width, 1280)  # API の実際の最大幅
+                        min_height = min(height, 768)  # API の実際の最大高さ
+                        
+                        # 明らかに小さすぎる場合はレート制限
+                        if actual_w < min_width * 0.8 or actual_h < min_height * 0.8:
+                            logger.warning(f"Possible rate limit image: got {image.size}, expected at least ({min_width}, {min_height})")
+                            if attempt < retries - 1:
+                                time.sleep(5)  # レート制限時は長めに待機
+                                continue
+                            else:
+                                return ImageResult(
+                                    success=False,
+                                    error_message=f"Rate limited: got {image.size}",
+                                    generation_time=time.time() - start_time,
+                                )
+                        
                         # 保存
                         save_dir = output_dir or IMAGES_DIR
                         save_dir.mkdir(parents=True, exist_ok=True)
                         output_path = save_dir / f"{output_name}.png"
 
-                        image = Image.open(io.BytesIO(response.content))
                         image.save(output_path, "PNG")
                         logger.info(f"Image saved: {output_path}")
 
