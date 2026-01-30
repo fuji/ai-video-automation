@@ -248,16 +248,24 @@ class NewsVideoPipeline:
                     data = json.loads(json_str)
                 except json.JSONDecodeError as e:
                     console.print(f"[yellow]⚠️ JSON パースエラー、修正を試みます...[/yellow]")
-                    import re
-                    # 余分なカンマを削除、改行を整理
-                    json_str = re.sub(r',\s*}', '}', json_str)
-                    json_str = re.sub(r',\s*]', ']', json_str)
-                    # 不完全なJSONを補完
-                    if json_str.count('[') > json_str.count(']'):
-                        json_str += ']' * (json_str.count('[') - json_str.count(']'))
-                    if json_str.count('{') > json_str.count('}'):
-                        json_str += '}' * (json_str.count('{') - json_str.count('}'))
-                    data = json.loads(json_str)
+                    # json_repair で自動修正
+                    try:
+                        from json_repair import repair_json
+                        repaired = repair_json(json_str, return_objects=True)
+                        if isinstance(repaired, dict):
+                            data = repaired
+                        else:
+                            raise ValueError("Repaired JSON is not a dict")
+                    except Exception:
+                        # フォールバック: 手動修正
+                        import re
+                        json_str = re.sub(r',\s*}', '}', json_str)
+                        json_str = re.sub(r',\s*]', ']', json_str)
+                        if json_str.count('[') > json_str.count(']'):
+                            json_str += ']' * (json_str.count('[') - json_str.count(']'))
+                        if json_str.count('{') > json_str.count('}'):
+                            json_str += '}' * (json_str.count('{') - json_str.count('}'))
+                        data = json.loads(json_str)
                 
                 # シーン数チェック
                 scenes = data.get('scenes', [])
