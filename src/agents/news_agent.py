@@ -92,9 +92,10 @@ class NewsVideoAgent:
         # Embed形式で記事リストを作成
         description_lines = []
         for i, article in enumerate(articles, 1):
-            title = article.title[:60] + "..." if len(article.title) > 60 else article.title
+            title = article.title[:50] + "..." if len(article.title) > 50 else article.title
             score_emoji = "🔥" if article.score > 1000 else "📰"
-            description_lines.append(f"**{i}.** {score_emoji} {title}")
+            url_text = f"\n   └ <{article.url}>" if article.url else ""
+            description_lines.append(f"**{i}.** {score_emoji} {title}{url_text}")
         
         embed = {
             "title": f"📰 {category.value.upper()} ニュース",
