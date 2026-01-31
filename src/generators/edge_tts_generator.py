@@ -114,7 +114,7 @@ class EdgeTTSGenerator:
         text: str,
         output_path: str = None,
         voice: str = None,
-        speed: float = 1.0,
+        speed: float = 1.1,  # +10% 早口がデフォルト
         pitch: float = 0.0,
         **kwargs,  # ElevenLabs互換のパラメータを無視
     ) -> NarrationResult:
@@ -197,7 +197,7 @@ class EdgeTTSConfig:
         """ニュース読み上げスタイル"""
         return {
             "voice": "Nanami",
-            "speed": 1.05,
+            "speed": 1.1,  # +10% 早口
             "pitch": 0,
         }
 
