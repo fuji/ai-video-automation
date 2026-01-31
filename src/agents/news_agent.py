@@ -244,15 +244,60 @@ URL: {article.url}
     # URL直接入力対応
     def _start_generation_from_url(self, url: str) -> str:
         """URLから直接動画生成"""
-        # 簡易実装: URLをタイトルとして使用
+        # ページタイトルを取得
+        title = self._fetch_page_title(url)
+        
         article = Article(
-            title=f"ニュース: {url}",
+            title=title,
             url=url,
             source="Direct URL",
             category=Category.BUZZ,
             summary="",
         )
         return asyncio.run(self.start_generation_from_article(article))
+    
+    def _fetch_page_title(self, url: str) -> str:
+        """URLからページタイトルを取得"""
+        try:
+            import requests
+            from html.parser import HTMLParser
+            
+            class TitleParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.in_title = False
+                    self.title = ""
+                
+                def handle_starttag(self, tag, attrs):
+                    if tag.lower() == "title":
+                        self.in_title = True
+                
+                def handle_endtag(self, tag):
+                    if tag.lower() == "title":
+                        self.in_title = False
+                
+                def handle_data(self, data):
+                    if self.in_title:
+                        self.title += data
+            
+            response = requests.get(url, timeout=10, headers={"User-Agent": "N1NewsBot/1.0"})
+            response.raise_for_status()
+            
+            parser = TitleParser()
+            parser.feed(response.text[:10000])  # 最初の10KBだけパース
+            
+            if parser.title:
+                # タイトルをクリーンアップ
+                title = parser.title.strip()
+                # サイト名を除去（例: " | CNN" や " - BBC"）
+                for sep in [" | ", " - ", " – ", " — "]:
+                    if sep in title:
+                        title = title.split(sep)[0].strip()
+                return title[:100]  # 最大100文字
+        except Exception as e:
+            console.print(f"[yellow]⚠️ タイトル取得失敗: {e}[/yellow]")
+        
+        return "最新ニュース"
 
 
 async def main():
