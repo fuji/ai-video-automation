@@ -292,7 +292,7 @@ class NewsVideoAgent:
         # パイプライン初期化（遅延）
         if self.pipeline is None:
             self.pipeline = NewsVideoPipeline(
-                channel_name="FJ News 24",
+                channel_name="N1",
                 num_scenes=12,  # 4グループ × 3シーン
                 scene_duration=5.0,
             )
@@ -349,7 +349,7 @@ class NewsVideoAgent:
         # パイプライン初期化（遅延）
         if self.pipeline is None:
             self.pipeline = NewsVideoPipeline(
-                channel_name="FJ News 24",
+                channel_name="N1",
                 num_scenes=12,  # 4グループ × 3シーン
                 scene_duration=5.0,
             )

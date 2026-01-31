@@ -104,7 +104,7 @@ class NewsConfig:
     """ニュース取得設定"""
     source: str = field(default_factory=lambda: os.getenv("NEWS_SOURCE", "yahoo"))
     category: str = field(default_factory=lambda: os.getenv("NEWS_CATEGORY", "entertainment"))
-    channel_name: str = field(default_factory=lambda: os.getenv("NEWS_CHANNEL_NAME", "FJ News 24"))
+    channel_name: str = field(default_factory=lambda: os.getenv("NEWS_CHANNEL_NAME", "N1"))
     limit: int = field(default_factory=lambda: int(os.getenv("NEWS_LIMIT", "10")))
 
 

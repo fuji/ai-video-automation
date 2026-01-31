@@ -252,7 +252,7 @@ class RemotionGenerator:
         subtitle: str = "",
         headline: str = "",
         sub_headline: str = "",
-        channel_name: str = "FJ News 24",
+        channel_name: str = "N1",
         is_breaking: bool = True,
         show_overlay: bool = True,
         animation_start: float = 0.0,

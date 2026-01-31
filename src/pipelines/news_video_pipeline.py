@@ -60,7 +60,7 @@ class NewsVideoPipeline:
     
     def __init__(
         self,
-        channel_name: str = "FJ News 24",
+        channel_name: str = "N1",
         num_scenes: int = 10,  # 10シーンで約60-90秒の動画
         scene_duration: float = 5.0,
         use_remotion: bool = True,  # Remotion を使う（無料）か Luma を使う（有料）
@@ -1170,7 +1170,7 @@ class NewsVideoPipeline:
                         {"name": "📦 サイズ", "value": f"{file_size:.1f}MB", "inline": True},
                         {"name": "📍 パス", "value": f"`{video_path}`", "inline": False},
                     ],
-                    "footer": {"text": f"FJ News 24 • {self.channel_name}"}
+                    "footer": {"text": f"N1 • {self.channel_name}"}
                 }]
             }
             

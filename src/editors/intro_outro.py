@@ -29,7 +29,7 @@ class IntroOutroConfig:
     text_color: str = "#ffffff"
     
     # チャンネル情報
-    channel_name: str = "FJ News 24"
+    channel_name: str = "N1"
     channel_tagline: str = "世界のおもしろニュース"
 
 
@@ -286,7 +286,7 @@ if __name__ == "__main__":
     import tempfile
     
     config = IntroOutroConfig(
-        channel_name="FJ News 24",
+        channel_name="N1",
         channel_tagline="世界のおもしろニュース"
     )
     
