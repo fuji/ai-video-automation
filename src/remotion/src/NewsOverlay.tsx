@@ -28,7 +28,7 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
   
   return (
     <AbsoluteFill>
-      {/* チャンネルロゴ（右上）- 楕円罫線 + 白イタリックテキスト */}
+      {/* チャンネルロゴ（右上）- 角丸四角形 + ノックアウトテキスト（白30%透過） */}
       <div
         style={{
           position: 'absolute',
@@ -37,34 +37,40 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
         }}
       >
         <svg
-          width={width * 0.144}
-          height={height * 0.048}
-          viewBox="0 0 120 40"
+          width={width * 0.13}
+          height={height * 0.045}
+          viewBox="0 0 140 55"
         >
-          {/* 2px の楕円罫線 */}
-          <ellipse
-            cx="60"
-            cy="20"
-            rx="56"
-            ry="17"
-            fill="none"
-            stroke="rgba(255, 255, 255, 0.5)"
-            strokeWidth="2"
+          <defs>
+            <mask id="knockout-text">
+              {/* 白 = 見える部分、黒 = くり抜かれる部分 */}
+              <rect x="0" y="0" width="140" height="55" rx="8" ry="8" fill="white" />
+              <text
+                x="70"
+                y="30"
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize="32"
+                fontWeight="bold"
+                fontFamily="Futura, Helvetica Neue, Arial, sans-serif"
+                letterSpacing="-2"
+                fill="black"
+              >
+                {channelName}
+              </text>
+            </mask>
+          </defs>
+          {/* 白30%透過の角丸四角形、テキスト部分がくり抜かれる */}
+          <rect
+            x="5"
+            y="5"
+            width="130"
+            height="45"
+            rx="8"
+            ry="8"
+            fill="rgba(255, 255, 255, 0.3)"
+            mask="url(#knockout-text)"
           />
-          {/* 白イタリックテキスト */}
-          <text
-            x="60"
-            y="20"
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize="26"
-            fontWeight="bold"
-            fontStyle="italic"
-            fontFamily="Helvetica Neue, Arial, sans-serif"
-            fill="rgba(255, 255, 255, 0.5)"
-          >
-            {channelName}
-          </text>
         </svg>
       </div>
       
