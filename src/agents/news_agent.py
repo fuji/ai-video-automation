@@ -126,16 +126,19 @@ class NewsVideoAgent:
             load_dotenv()
             self.pipeline = NewsVideoPipeline(channel_name="N1", use_remotion=True)
         
-        # 記事からシーン構成を生成（簡易版）
-        scenes_data = await self._generate_scenes_from_article(article)
+        # 記事からシーン構成を生成（日本語見出し含む）
+        scenes_data, headline_ja, sub_headline_ja = await self._generate_scenes_from_article(article)
+        
+        console.print(f"[cyan]📰 日本語見出し: {headline_ja}[/cyan]")
+        console.print(f"[cyan]📰 サブ見出し: {sub_headline_ja}[/cyan]")
         
         # パイプライン実行
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_prefix = f"news_{timestamp}"
         
         result = self.pipeline.run(
-            headline=article.title,
-            sub_headline=article.summary[:100] if article.summary else "",
+            headline=headline_ja,  # 日本語見出し
+            sub_headline=sub_headline_ja,  # 日本語サブ見出し
             scenes_data=scenes_data,
             output_prefix=output_prefix,
             is_breaking=True,
@@ -147,8 +150,12 @@ class NewsVideoAgent:
             self._send_discord_message(f"❌ 生成失敗: {result.error_message}")
             return ""
     
-    async def _generate_scenes_from_article(self, article: Article) -> list[dict]:
-        """記事からシーン構成を自動生成"""
+    async def _generate_scenes_from_article(self, article: Article) -> tuple[list[dict], str, str]:
+        """記事からシーン構成を自動生成
+        
+        Returns:
+            tuple: (scenes_data, japanese_headline, japanese_sub_headline)
+        """
         # Geminiで記事を分析してシーン構成を生成
         import google.genai as genai
         from src.config import config
@@ -161,19 +168,25 @@ class NewsVideoAgent:
 概要: {article.summary or "概要なし"}
 URL: {article.url}
 
-以下のJSON形式で8-10シーンを出力してください:
+以下のJSON形式で出力してください:
 ```json
-[
-  {{
-    "title": "シーンタイトル",
-    "narration": "ナレーションテキスト（1文）",
-    "visual_description": "映像の説明（英語推奨）",
-    "emphasis_word": "強調キーワード"
-  }}
-]
+{{
+  "headline": "日本語の見出し（15文字以内、インパクト重視）",
+  "sub_headline": "日本語のサブ見出し（20文字以内）",
+  "scenes": [
+    {{
+      "title": "シーンタイトル",
+      "narration": "ナレーションテキスト（1文）",
+      "visual_description": "映像の説明（英語推奨）",
+      "emphasis_word": "強調キーワード"
+    }}
+  ]
+}}
 ```
 
 注意:
+- headline と sub_headline は必ず日本語で
+- scenes は8-10シーン
 - フックで視聴者を引き込む冒頭
 - 各シーン5-7秒程度のナレーション
 - 驚きや感動のポイントを強調
@@ -188,18 +201,21 @@ URL: {article.url}
             
             # JSONを抽出
             text = response.text
-            json_match = re.search(r'\[[\s\S]*\]', text)
+            json_match = re.search(r'\{[\s\S]*\}', text)
             if json_match:
-                scenes = json.loads(json_match.group())
-                return scenes
+                data = json.loads(json_match.group())
+                scenes = data.get("scenes", [])
+                headline_ja = data.get("headline", article.title)
+                sub_headline_ja = data.get("sub_headline", "")
+                return scenes, headline_ja, sub_headline_ja
         except Exception as e:
             console.print(f"[yellow]⚠️ Gemini分析エラー: {e}[/yellow]")
         
         # フォールバック: 基本的なシーン構成
-        return [
+        fallback_scenes = [
             {
                 "title": "導入",
-                "narration": f"今日は驚きのニュースをお届けします。{article.title}",
+                "narration": f"今日は驚きのニュースをお届けします。",
                 "visual_description": "News studio with breaking news graphics",
                 "emphasis_word": "驚き",
             },
@@ -216,6 +232,8 @@ URL: {article.url}
                 "emphasis_word": "いいね",
             },
         ]
+        # フォールバック時は元のタイトルをそのまま使用（翻訳失敗）
+        return fallback_scenes, article.title, ""
     
     async def handle_message(self, message: str, channel_id: str = "default") -> str:
         """メッセージを処理"""
