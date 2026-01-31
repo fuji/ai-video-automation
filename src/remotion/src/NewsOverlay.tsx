@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Img, staticFile, useVideoConfig } from 'remotion';
 
 export interface NewsOverlayProps {
   channelName: string;
@@ -28,7 +28,7 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
   
   return (
     <AbsoluteFill>
-      {/* チャンネルロゴ（右上）- 角丸四角形 + ノックアウトテキスト（白30%透過） */}
+      {/* チャンネルロゴ（右上）- logo-n1.png */}
       <div
         style={{
           position: 'absolute',
@@ -36,42 +36,13 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
           right: width * 0.03,
         }}
       >
-        <svg
-          width={width * 0.13}
-          height={height * 0.045}
-          viewBox="0 0 140 55"
-        >
-          <defs>
-            <mask id="knockout-text">
-              {/* 白 = 見える部分、黒 = くり抜かれる部分 */}
-              <rect x="0" y="0" width="140" height="55" rx="8" ry="8" fill="white" />
-              <text
-                x="70"
-                y="30"
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize="32"
-                fontWeight="bold"
-                fontFamily="Futura, Helvetica Neue, Arial, sans-serif"
-                letterSpacing="-2"
-                fill="black"
-              >
-                {channelName}
-              </text>
-            </mask>
-          </defs>
-          {/* 白30%透過の角丸四角形、テキスト部分がくり抜かれる */}
-          <rect
-            x="5"
-            y="5"
-            width="130"
-            height="45"
-            rx="8"
-            ry="8"
-            fill="rgba(255, 255, 255, 0.3)"
-            mask="url(#knockout-text)"
-          />
-        </svg>
+        <Img
+          src={staticFile('logo-n1.png')}
+          style={{
+            width: width * 0.28,  // アウトロより少し大きい
+            height: 'auto',
+          }}
+        />
       </div>
       
       {/* 字幕（中央） */}
@@ -134,6 +105,7 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
                   color: 'white',
                   fontSize: breakingHeight * 0.55,
                   fontWeight: 'bold',
+                  fontStyle: 'italic',
                   fontFamily: '"Hiragino Sans", sans-serif',
                   lineHeight: 1,
                 }}

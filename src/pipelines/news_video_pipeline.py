@@ -91,6 +91,8 @@ class NewsVideoPipeline:
         self.intro_outro_gen = IntroOutroGenerator(IntroOutroConfig(
             channel_name=channel_name,
             channel_tagline="世界のおもしろニュース",
+            intro_duration=2.0,  # 2秒イントロ（ロゴフェードイン）
+            outro_duration=3.0,  # 3秒アウトロ
         ))
         
         # Remotion ジェネレーター（無料モーショングラフィックス）
