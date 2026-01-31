@@ -28,32 +28,44 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
   
   return (
     <AbsoluteFill>
-      {/* チャンネルロゴ（上部）- 常時表示 */}
+      {/* チャンネルロゴ（右上）- 楕円罫線 + 白イタリックテキスト */}
       <div
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: logoHeight,
-          backgroundColor: 'rgba(200, 30, 30, 0.95)',
-          display: 'flex',
-          alignItems: 'center',
-          paddingLeft: width * 0.05,
-          opacity: 1,
+          top: height * 0.02,
+          right: width * 0.03,
         }}
       >
-        <span
-          style={{
-            color: 'white',
-            fontSize: logoHeight * 0.6,
-            fontWeight: 'bold',
-            fontFamily: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif',
-            letterSpacing: '-0.02em',
-          }}
+        <svg
+          width={width * 0.144}
+          height={height * 0.048}
+          viewBox="0 0 120 40"
         >
-          {channelName}
-        </span>
+          {/* 2px の楕円罫線 */}
+          <ellipse
+            cx="60"
+            cy="20"
+            rx="56"
+            ry="17"
+            fill="none"
+            stroke="rgba(255, 255, 255, 0.5)"
+            strokeWidth="2"
+          />
+          {/* 白イタリックテキスト */}
+          <text
+            x="60"
+            y="20"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="26"
+            fontWeight="bold"
+            fontStyle="italic"
+            fontFamily="Helvetica Neue, Arial, sans-serif"
+            fill="rgba(255, 255, 255, 0.5)"
+          >
+            {channelName}
+          </text>
+        </svg>
       </div>
       
       {/* 字幕（中央） */}
@@ -101,17 +113,23 @@ export const NewsOverlay: React.FC<NewsOverlayProps> = ({
             <div
               style={{
                 backgroundColor: 'rgba(200, 30, 30, 0.95)',
-                display: 'inline-block',
-                padding: `${breakingHeight * 0.15}px ${breakingHeight * 0.5}px`,
+                display: 'inline-flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                height: breakingHeight,
+                paddingLeft: breakingHeight * 0.5,
+                paddingRight: breakingHeight * 0.5,
+                paddingBottom: breakingHeight * 0.15,
                 marginBottom: 0,
               }}
             >
               <span
                 style={{
                   color: 'white',
-                  fontSize: breakingHeight * 0.65,
+                  fontSize: breakingHeight * 0.55,
                   fontWeight: 'bold',
                   fontFamily: '"Hiragino Sans", sans-serif',
+                  lineHeight: 1,
                 }}
               >
                 BREAKING NEWS
