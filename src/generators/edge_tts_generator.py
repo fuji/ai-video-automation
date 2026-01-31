@@ -155,14 +155,26 @@ class EdgeTTSGenerator:
         
         logger.info(f"Generating Edge TTS: {len(text)} chars, voice={voice}, rate={rate}")
 
-        # 非同期関数を同期的に実行
-        return asyncio.run(self._generate_async(
+        # 非同期関数を同期的に実行（既存ループがある場合も対応）
+        coro = self._generate_async(
             text=text,
             output_path=output_path,
             voice=voice,
             rate=rate,
             pitch=pitch_hz,
-        ))
+        )
+        
+        try:
+            # 既存のイベントループがあるかチェック
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # ループがない場合は asyncio.run() を使用
+            return asyncio.run(coro)
+        else:
+            # ループが既にある場合は nest_asyncio を使用
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(coro)
 
     def can_generate(self, char_count: int) -> bool:
         """生成可能かチェック（Edge TTSは無制限）"""
