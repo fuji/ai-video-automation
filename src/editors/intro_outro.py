@@ -159,14 +159,14 @@ class IntroOutroGenerator:
         return frames
     
     def create_outro_frames(self, output_dir: Path) -> list[str]:
-        """アウトロのフレームを生成 - シンプル白背景"""
+        """アウトロのフレームを生成 - 質問形CTA（心理学的に効果的）"""
         output_dir.mkdir(parents=True, exist_ok=True)
         
         frames = []
         total_frames = int(self.config.outro_duration * self.config.fps)
         
         for i in range(total_frames):
-            progress = i / total_frames
+            time = i / self.config.fps
             frame_path = output_dir / f"outro_{i:04d}.png"
             
             # 白背景
@@ -175,38 +175,58 @@ class IntroOutroGenerator:
             
             center_x, center_y = self.config.width // 2, self.config.height // 2
             
-            # フェードイン (0-0.2)
-            if progress < 0.2:
-                alpha = progress / 0.2
+            # ロゴ（イーズイン 0-0.5s）
+            if time < 0.5:
+                logo_progress = time / 0.5
+                logo_scale = logo_progress ** 2
             else:
-                alpha = 1.0
+                logo_scale = 1.0
             
-            # メインテキスト
-            main_text = "ご視聴ありがとう！"
-            bbox = draw.textbbox((0, 0), main_text, font=self.font_large)
-            text_width = bbox[2] - bbox[0]
-            text_x = (self.config.width - text_width) // 2
-            text_y = center_y - 100
+            # ロゴ描画
+            if logo_scale > 0.01:
+                rect_width = int(280 * logo_scale)
+                rect_height = int(110 * logo_scale)
+                radius = int(15 * logo_scale)
+                draw.rounded_rectangle(
+                    [center_x - rect_width // 2, center_y - 250 - rect_height // 2,
+                     center_x + rect_width // 2, center_y - 250 + rect_height // 2],
+                    radius=max(1, radius),
+                    fill=self.config.accent_color
+                )
+                # N1テキスト
+                self._draw_logo_with_tight_spacing(
+                    draw, self.config.channel_name, self.font_logo,
+                    center_x, center_y - 250, '#ffffff', spacing=-8
+                )
             
-            text_color = self._blend_color('#333333', '#ffffff', alpha)
-            draw.text((text_x, text_y), main_text, font=self.font_large, fill=text_color)
+            # 「面白かった？」(0.3s〜)
+            if time >= 0.3:
+                text_alpha = min(1.0, (time - 0.3) / 0.3)
+                gray = int(51 + (255 - 51) * (1 - text_alpha))
+                text = "面白かった？"
+                bbox = draw.textbbox((0, 0), text, font=self.font_large)
+                text_x = (self.config.width - (bbox[2] - bbox[0])) // 2
+                draw.text((text_x, center_y - 50), text, font=self.font_large, fill=f'#{gray:02x}{gray:02x}{gray:02x}')
             
-            # サブテキスト
-            sub_texts = [
-                "いいね & チャンネル登録",
-                "よろしくお願いします！"
-            ]
+            # 「いいねで教えてね！」(0.6s〜) - 赤色
+            if time >= 0.6:
+                text_alpha = min(1.0, (time - 0.6) / 0.3)
+                r = int(233 * text_alpha + 255 * (1 - text_alpha))
+                g = int(69 * text_alpha + 255 * (1 - text_alpha))
+                b = int(96 * text_alpha + 255 * (1 - text_alpha))
+                text = "いいねで教えてね！"
+                bbox = draw.textbbox((0, 0), text, font=self.font_medium)
+                text_x = (self.config.width - (bbox[2] - bbox[0])) // 2
+                draw.text((text_x, center_y + 70), text, font=self.font_medium, fill=f'#{r:02x}{g:02x}{b:02x}')
             
-            for j, sub_text in enumerate(sub_texts):
-                bbox = draw.textbbox((0, 0), sub_text, font=self.font_medium)
-                sub_width = bbox[2] - bbox[0]
-                sub_x = (self.config.width - sub_width) // 2
-                sub_y = text_y + 120 + j * 70
-                
-                sub_color = self._blend_color('#666666', '#ffffff', alpha * 0.9)
-                draw.text((sub_x, sub_y), sub_text, font=self.font_medium, fill=sub_color)
-            
-            # チャンネル名（下部）- 削除済み
+            # サブテキスト (1.0s〜)
+            if time >= 1.0:
+                text_alpha = min(1.0, (time - 1.0) / 0.3)
+                gray = int(136 + (255 - 136) * (1 - text_alpha))
+                text = "チャンネル登録もよろしく！"
+                bbox = draw.textbbox((0, 0), text, font=self.font_small)
+                text_x = (self.config.width - (bbox[2] - bbox[0])) // 2
+                draw.text((text_x, center_y + 160), text, font=self.font_small, fill=f'#{gray:02x}{gray:02x}{gray:02x}')
             
             img.save(frame_path)
             frames.append(str(frame_path))
