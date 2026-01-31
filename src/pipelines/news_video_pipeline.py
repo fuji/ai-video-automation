@@ -504,52 +504,27 @@ class NewsVideoPipeline:
             scene_num = scene.index + 1  # 1-based
             group_num = image_group_numbers.get(img, scene_num) if img else scene_num
             
-            # 背景画像があればニュース風、なければモーショングラフィックス
-            if scene.image_path and news_style:
-                # ニュース風（背景画像 + オーバーレイ）
-                # - チャンネルロゴ: 全シーンで表示
-                # - バナー（BREAKING + タイトル + サブタイトル）: 全シーンで表示
-                # - 字幕: 全シーンで表示
-                result = self.remotion_gen.generate_news_scene(
-                    scene_number=group_num,  # 画像グループ番号でアニメーションパターン決定
-                    duration=duration,
-                    output_path=output_path,
-                    background_image=scene.image_path,
-                    subtitle=narration_text if narration_text else "",  # 全文表示
-                    headline=headline,  # 全シーンで表示
-                    sub_headline=sub_headline,  # 全シーンで表示
-                    channel_name=self.channel_name,
-                    is_breaking=is_breaking,  # 全シーンで表示
-                    show_overlay=True,  # 全シーンで表示
-                    animation_start=anim_start,
-                    animation_end=anim_end,
-                )
-            else:
-                # モーショングラフィックス風（グラデーション背景）
-                base_colors = mood_colors.get(mood, mood_colors["exciting"])
-                scene_config = SceneConfig(
-                    scene_number=scene.index + 1,
-                    duration=duration,
-                    background_colors=base_colors,
-                    elements=[
-                        {
-                            "type": "emoji",
-                            "content": self._get_emoji_for_scene(scene.description),
-                            "style": {"size": "xxl"},
-                            "position": {"x": "center", "y": "center", "offsetY": -100},
-                            "animation": {"enter": "bounce-in", "delay": 0},
-                        },
-                        {
-                            "type": "text",
-                            "content": narration_text[:40] if narration_text else scene.description[:40],
-                            "style": {"size": "lg", "weight": "bold", "color": "#FFFFFF"},
-                            "position": {"x": "center", "y": "center", "offsetY": 120},
-                            "animation": {"enter": "fade-in-up", "delay": 0.5},
-                        },
-                    ],
-                    subtitle=scene.subtitle[:50] if scene.subtitle else "",
-                )
-                result = self.remotion_gen.generate_scene(scene_config, output_path)
+            # 常にニュース風オーバーレイを使用（画像がなくてもグラデーション背景で）
+            # - チャンネルロゴ: 全シーンで表示
+            # - バナー（BREAKING + タイトル + サブタイトル）: 全シーンで表示
+            # - 字幕: 全シーンで表示
+            base_colors = mood_colors.get(mood, mood_colors["exciting"])
+            
+            result = self.remotion_gen.generate_news_scene(
+                scene_number=group_num,  # 画像グループ番号でアニメーションパターン決定
+                duration=duration,
+                output_path=output_path,
+                background_image=scene.image_path if scene.image_path else None,
+                background_colors=base_colors if not scene.image_path else None,
+                subtitle=narration_text if narration_text else "",  # 全文表示
+                headline=headline,  # 全シーンで表示
+                sub_headline=sub_headline,  # 全シーンで表示
+                channel_name=self.channel_name,
+                is_breaking=is_breaking,  # 全シーンで表示
+                show_overlay=True,  # 全シーンで表示
+                animation_start=anim_start,
+                animation_end=anim_end,
+            )
             
             if result.success:
                 scene.video_path = output_path

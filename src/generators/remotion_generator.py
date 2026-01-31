@@ -248,7 +248,8 @@ class RemotionGenerator:
         scene_number: int,
         duration: float,
         output_path: str,
-        background_image: str,
+        background_image: Optional[str] = None,
+        background_colors: Optional[list[str]] = None,
         subtitle: str = "",
         headline: str = "",
         sub_headline: str = "",
@@ -261,13 +262,14 @@ class RemotionGenerator:
         height: int = 1920,
         fps: int = 30,
     ) -> RemotionResult:
-        """ニュース風シーンを生成（背景画像 + ニュースオーバーレイ）
+        """ニュース風シーンを生成（背景画像 or グラデーション + ニュースオーバーレイ）
         
         Args:
             scene_number: シーン番号
             duration: シーン秒数
             output_path: 出力パス
-            background_image: 背景画像パス（絶対パス）
+            background_image: 背景画像パス（絶対パス、省略可）
+            background_colors: グラデーション色（background_imageがない場合に使用）
             subtitle: 字幕テキスト
             headline: ヘッドライン（最初のシーンのみ表示推奨）
             sub_headline: サブヘッドライン
@@ -278,10 +280,15 @@ class RemotionGenerator:
         Returns:
             RemotionResult
         """
+        # 背景画像がない場合はグラデーション
+        if not background_image and not background_colors:
+            background_colors = ["#1a1a2e", "#16213e", "#0f3460"]  # デフォルト暗めのグラデーション
+        
         scene = SceneConfig(
             scene_number=scene_number,
             duration=duration,
             background_image=background_image,
+            background_colors=background_colors,
             subtitle=subtitle,
             animation_start=animation_start,
             animation_end=animation_end,
