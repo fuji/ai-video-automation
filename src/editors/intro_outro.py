@@ -51,6 +51,7 @@ class IntroOutroGenerator:
         self.font_large = None
         self.font_medium = None
         self.font_small = None
+        self.font_logo = None  # ロゴ用Futura Bold
         
         for font_path in font_paths:
             if Path(font_path).exists():
@@ -63,22 +64,56 @@ class IntroOutroGenerator:
                 except Exception as e:
                     logger.warning(f"Font load failed: {font_path} - {e}")
         
+        # ロゴ用Futura Bold
+        futura_path = "/System/Library/Fonts/Supplemental/Futura.ttc"
+        if Path(futura_path).exists():
+            try:
+                self.font_logo = ImageFont.truetype(futura_path, 85, index=2)  # Futura Bold
+                logger.info("Futura Bold loaded for logo")
+            except Exception as e:
+                logger.warning(f"Futura load failed: {e}")
+                self.font_logo = self.font_large
+        else:
+            self.font_logo = self.font_large
+        
         if not self.font_large:
             self.font_large = ImageFont.load_default()
             self.font_medium = ImageFont.load_default()
             self.font_small = ImageFont.load_default()
+            self.font_logo = ImageFont.load_default()
+    
+    def _draw_logo_with_tight_spacing(self, draw, text, font, cx, cy, fill, spacing=-8):
+        """レタースペーシングを詰めてロゴを描画"""
+        # 各文字の幅を取得してトータル幅計算
+        total_width = 0
+        char_data = []
+        for char in text:
+            bbox = draw.textbbox((0, 0), char, font=font)
+            w = bbox[2] - bbox[0]
+            char_data.append((char, w, bbox))
+            total_width += w
+        total_width += spacing * (len(text) - 1)
+        
+        # 中央から描画開始
+        start_x = cx - total_width // 2
+        current_x = start_x
+        
+        for char, w, bbox in char_data:
+            char_y = cy - (bbox[3] - bbox[1]) // 2 - bbox[1]
+            draw.text((current_x, char_y), char, font=font, fill=fill)
+            current_x += w + spacing
     
     def create_intro_frames(self, output_dir: Path) -> list[str]:
-        """イントロのフレームを生成 - 白背景 + 赤丸スムース拡大 + 白文字静止"""
+        """イントロのフレームを生成 - 白背景 + 赤角丸四角形拡大 + 白N1固定（Futura Bold）"""
         output_dir.mkdir(parents=True, exist_ok=True)
         
         frames = []
         total_frames = int(self.config.intro_duration * self.config.fps)
-        
-        import math
+        hold_time = 0.5  # 最後の停止時間
+        anim_duration = self.config.intro_duration - hold_time  # アニメーション時間
         
         for i in range(total_frames):
-            progress = i / total_frames
+            time = i / self.config.fps
             frame_path = output_dir / f"intro_{i:04d}.png"
             
             # 白背景
@@ -87,29 +122,36 @@ class IntroOutroGenerator:
             
             center_x, center_y = self.config.width // 2, self.config.height // 2
             
-            # 赤丸のスムースな拡大（イージング: ease-out）
-            # 0→1 に ease-out で拡大
-            eased = 1 - (1 - progress) ** 3  # cubic ease-out
-            min_radius = 0
-            max_radius = 280
-            circle_radius = int(min_radius + (max_radius - min_radius) * eased)
+            # アニメーション進捗（anim_duration秒でアニメ完了、その後停止）
+            if time < anim_duration:
+                progress = time / anim_duration
+                eased = progress ** 3  # ease-in（ゆっくり→加速）
+                scale = eased
+            else:
+                scale = 1.0  # 停止
             
-            if circle_radius > 0:
-                draw.ellipse(
-                    [center_x - circle_radius, center_y - circle_radius,
-                     center_x + circle_radius, center_y + circle_radius],
+            # 赤の角丸四角形（塗りつぶし）- 0から拡大
+            if scale > 0.01:
+                rect_width = int(280 * scale)
+                rect_height = int(110 * scale)
+                radius = int(15 * scale)
+                draw.rounded_rectangle(
+                    [center_x - rect_width // 2, center_y - rect_height // 2,
+                     center_x + rect_width // 2, center_y + rect_height // 2],
+                    radius=max(1, radius),
                     fill=self.config.accent_color
                 )
             
-            # チャンネル名（白文字、静止、常に表示）
-            text = self.config.channel_name
-            bbox = draw.textbbox((0, 0), text, font=self.font_large)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-            text_x = (self.config.width - text_width) // 2
-            text_y = center_y - text_height // 2
-            
-            draw.text((text_x, text_y), text, font=self.font_large, fill='#ffffff')
+            # チャンネル名（白、Futura Bold、レタースペーシング詰め）- 最初から表示
+            self._draw_logo_with_tight_spacing(
+                draw, 
+                self.config.channel_name, 
+                self.font_logo, 
+                center_x, 
+                center_y, 
+                '#ffffff',
+                spacing=-8
+            )
             
             img.save(frame_path)
             frames.append(str(frame_path))
@@ -164,15 +206,7 @@ class IntroOutroGenerator:
                 sub_color = self._blend_color('#666666', '#ffffff', alpha * 0.9)
                 draw.text((sub_x, sub_y), sub_text, font=self.font_medium, fill=sub_color)
             
-            # チャンネル名（下部）- 赤文字
-            channel_text = self.config.channel_name
-            bbox = draw.textbbox((0, 0), channel_text, font=self.font_small)
-            ch_width = bbox[2] - bbox[0]
-            ch_x = (self.config.width - ch_width) // 2
-            ch_y = self.config.height - 200
-            
-            ch_color = self._blend_color(self.config.accent_color, '#ffffff', alpha)
-            draw.text((ch_x, ch_y), channel_text, font=self.font_small, fill=ch_color)
+            # チャンネル名（下部）- 削除済み
             
             img.save(frame_path)
             frames.append(str(frame_path))
